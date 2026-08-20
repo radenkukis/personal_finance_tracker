@@ -1,0 +1,248 @@
+/**
+ * Konfirmasi hasil parsing sebelum masuk database.
+ *
+ * AI tidak pernah menulis langsung. Setiap hasil ditampilkan sebagai draft
+ * yang bisa diubah, dan yang keyakinannya rendah ditandai jelas. Ini yang
+ * membedakan "AI membantu" dari "AI diam-diam mengisi data yang salah".
+ */
+import { useMemo } from 'react';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
+import { colors, radius, space, type } from '@/lib/theme';
+import { groupDigits, relativeDay } from '@/lib/format';
+import type { Account, Category, DraftTransaction } from '@/types/db';
+
+const LOW_CONFIDENCE = 0.6;
+
+export function DraftReviewSheet({
+  drafts,
+  categories,
+  accounts,
+  onChange,
+  onRemove,
+}: {
+  drafts: readonly DraftTransaction[];
+  categories: readonly Category[];
+  accounts: readonly Account[];
+  onChange: (index: number, patch: Partial<DraftTransaction>) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <View style={{ gap: space.sm }}>
+      {drafts.map((draft, i) => (
+        <DraftCard
+          key={`${draft.raw_input}-${i}`}
+          draft={draft}
+          categories={categories}
+          accounts={accounts}
+          onChange={(patch) => onChange(i, patch)}
+          onRemove={() => onRemove(i)}
+        />
+      ))}
+    </View>
+  );
+}
+
+function DraftCard({
+  draft,
+  categories,
+  accounts,
+  onChange,
+  onRemove,
+}: {
+  draft: DraftTransaction;
+  categories: readonly Category[];
+  accounts: readonly Account[];
+  onChange: (patch: Partial<DraftTransaction>) => void;
+  onRemove: () => void;
+}) {
+  const uncertain = draft.confidence < LOW_CONFIDENCE;
+  const pool = useMemo(
+    () => categories.filter((c) => c.kind === draft.kind),
+    [categories, draft.kind],
+  );
+  const activeColor =
+    pool.find((c) => c.name === draft.category_name)?.color ?? colors.textFaint;
+
+  return (
+    <Card style={uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : undefined}>
+      {/* Baris atas: jenis, nominal, hapus */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+        <Pressable
+          onPress={() =>
+            onChange({
+              kind: draft.kind === 'expense' ? 'income' : 'expense',
+              category_name: null,
+            })
+          }
+          accessibilityLabel="Ganti jenis transaksi"
+          style={{ alignItems: 'center', gap: 3 }}
+        >
+          <IconBadge
+            name={draft.kind === 'income' ? 'arrow-down-left' : 'arrow-up-right'}
+            color={draft.kind === 'income' ? colors.income : colors.expense}
+            diameter={32}
+          />
+          <Txt variant="caption" color={colors.textFaint}>
+            {draft.kind === 'income' ? 'masuk' : 'keluar'}
+          </Txt>
+        </Pressable>
+
+        <View style={{ flex: 1 }}>
+          <Txt variant="overline" color={colors.textFaint}>
+            Nominal
+          </Txt>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Txt variant="displaySm" color={colors.textMuted}>
+              Rp
+            </Txt>
+            <TextInput
+              value={groupDigits(draft.amount)}
+              onChangeText={(v) => onChange({ amount: parseDigits(v) })}
+              keyboardType="number-pad"
+              style={[type.displaySm, { color: colors.text, flex: 1, padding: 0 }]}
+              accessibilityLabel="Nominal transaksi"
+            />
+          </View>
+        </View>
+
+        <Pressable onPress={onRemove} accessibilityLabel="Hapus draft ini" hitSlop={10}>
+          <Feather name="x" size={18} color={colors.textFaint} />
+        </Pressable>
+      </View>
+
+      {uncertain ? (
+        <View style={styles.warnRow}>
+          <Feather name="alert-triangle" size={12} color={colors.warning} />
+          <Txt variant="caption" color={colors.warning}>
+            Kurang yakin — mohon dicek dulu
+          </Txt>
+        </View>
+      ) : null}
+
+      <View style={{ marginVertical: space.md }}>
+        <Divider />
+      </View>
+
+      {/* Nama tempat */}
+      <TextInput
+        value={draft.merchant ?? ''}
+        onChangeText={(v) => onChange({ merchant: v.trim() ? v : null })}
+        placeholder="Nama tempat (opsional)"
+        placeholderTextColor={colors.textFaint}
+        style={[type.body, styles.merchantInput]}
+        accessibilityLabel="Nama tempat"
+      />
+
+      {/* Kategori */}
+      <Txt variant="overline" color={colors.textFaint} style={{ marginTop: space.md }}>
+        Kategori
+      </Txt>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 6, paddingVertical: space.sm }}
+      >
+        {pool.map((c) => {
+          const active = c.name === draft.category_name;
+          return (
+            <Chip
+              key={c.id}
+              label={c.name}
+              active={active}
+              color={c.color}
+              onPress={() => onChange({ category_name: c.name })}
+            />
+          );
+        })}
+      </ScrollView>
+
+      {/* Dompet & waktu */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 2 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 6 }}
+          style={{ flex: 1 }}
+        >
+          {accounts.map((a) => (
+            <Chip
+              key={a.id}
+              label={a.name}
+              active={a.name === draft.account_name}
+              color={activeColor}
+              onPress={() => onChange({ account_name: a.name })}
+            />
+          ))}
+        </ScrollView>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Feather name="clock" size={12} color={colors.textFaint} />
+          <Txt variant="caption" color={colors.textFaint}>
+            {relativeDay(new Date(draft.occurred_at))}
+          </Txt>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function Chip({
+  label,
+  active,
+  color,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: active ? withAlpha(color, 0.18) : colors.surfaceRaised,
+          borderColor: active ? color : 'transparent',
+        },
+      ]}
+    >
+      <Txt variant="caption" color={active ? color : colors.textMuted}>
+        {label}
+      </Txt>
+    </Pressable>
+  );
+}
+
+/** "1.250.000" -> 1250000. Input nominal selalu bilangan bulat rupiah. */
+function parseDigits(value: string): number {
+  const digits = value.replace(/\D/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+const styles = {
+  warnRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    marginTop: space.sm,
+  },
+  merchantInput: {
+    color: colors.text,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  chip: {
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+};
