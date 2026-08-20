@@ -267,6 +267,20 @@ Diuji pada 20 Agustus 2026 memakai stack Supabase lokal (Postgres 17), bukan tir
 Pengujian itulah yang menemukan bug GRANT: skema sempat menyalakan RLS tanpa memberi izin
 tabel, sehingga setiap query ditolak Postgres. Tidak akan pernah ketahuan dari unit test.
 
+Keempat Edge Function juga dijalankan sungguhan di Edge Runtime Deno (`supabase functions serve`):
+
+| Yang diuji | Hasil |
+|---|---|
+| Panggilan tanpa token | 401 — dijaga `requireUser`, bukan hanya oleh platform |
+| `LLM_PROVIDER` belum diset | 501 beserta perintah perbaikannya |
+| Teks kosong / lebih dari 1.000 karakter | 400 |
+| Format audio tidak didukung | 400 |
+| `LLM_PROVIDER=claude` tanpa API key | Modul `npm:@anthropic-ai/sdk` termuat, jalur Claude tereksekusi sampai pengecekan key |
+| `STT_PROVIDER=groq` tanpa API key | Jalur Groq tereksekusi sampai pengecekan key |
+
+Yang **belum** terbukti: panggilan HTTP sebenarnya ke Anthropic/Gemini/Groq — itu butuh
+API key sungguhan.
+
 ---
 
 ## Belum ada (sengaja)
