@@ -105,6 +105,11 @@ Edge Function.
    ```
    atau tempel isi `supabase/migrations/20260820000000_init.sql` ke **SQL Editor**.
 3. Buka **Project Settings → Data API**, salin **Project URL** dan **anon public key** ke `.env`.
+4. **Putuskan soal konfirmasi email.** Bawaannya menyala, dan layanan email gratis Supabase
+   dibatasi hanya beberapa pengiriman per jam — mendaftar beberapa akun berturut-turut akan
+   kena `over_email_send_rate_limit`. Pilih salah satu di **Authentication → Sign In / Providers → Email**:
+   - matikan **Confirm email** (paling praktis untuk pemakaian pribadi), atau
+   - biarkan menyala dan pasang **SMTP sendiri** di **Project Settings → Authentication → SMTP Settings**.
 
 > **Anon key aman berada di aplikasi.** Aksesnya dibatasi Row Level Security ditambah GRANT
 > tingkat tabel — tiap user hanya bisa menyentuh barisnya sendiri. Yang **tidak boleh** masuk
@@ -280,6 +285,18 @@ Keempat Edge Function juga dijalankan sungguhan di Edge Runtime Deno (`supabase 
 
 Yang **belum** terbukti: panggilan HTTP sebenarnya ke Anthropic/Gemini/Groq — itu butuh
 API key sungguhan.
+
+Seluruh rangkaian di atas diulang terhadap **project Supabase cloud sungguhan** (region Singapore,
+PostgreSQL 17.6) dan hasilnya sama: migrasi terpasang, trigger menyemai 13 kategori dan 3 dompet,
+isolasi antar-user tembus nol baris, penyamaran ditolak 42501, dan kalimat
+`"kemarin makan di warteg bu ani 35rb, kopi 22rb gopay, gajian 8jt"` tersimpan sebagai tiga
+transaksi — termasuk mengenali `gajian 8jt` sebagai pemasukan. Menghapus akun ikut menghapus
+seluruh datanya, membuktikan `on delete cascade` bekerja.
+
+Pengujian terhadap cloud itu menemukan perbedaan yang tidak muncul di lokal: Supabase cloud
+memasang *default privileges* yang otomatis membuka tabel baru untuk role `anon`. Datanya tidak
+bocor karena RLS tetap memblokir, tetapi lapisan keduanya hilang — diperbaiki oleh migrasi
+`20260820120000_revoke_anon.sql`.
 
 ---
 
