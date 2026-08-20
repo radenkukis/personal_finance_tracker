@@ -40,42 +40,82 @@ Dengan `EXPO_PUBLIC_AI_MODE=local`, dashboard, proyeksi, deteksi langganan, dan 
 
 ## Cara menjalankan
 
-### 1. Pasang dependensi
-
 ```bash
 npm install
 ```
 
-### 2. Siapkan Supabase (gratis)
+Lalu pilih salah satu cara menyiapkan database. Keduanya memakai migrasi yang sama:
+`supabase/migrations/20260820000000_init.sql`.
 
-1. Buat akun di [supabase.com](https://supabase.com), lalu buat project baru.
-2. Buka **SQL Editor → New query**, tempel seluruh isi [`supabase/schema.sql`](supabase/schema.sql),
-   jalankan. Ini membuat semua tabel, Row Level Security, dan menyiapkan 13 kategori khas
-   Indonesia + 3 dompet yang otomatis terisi setiap kali ada user baru mendaftar.
-3. Buka **Project Settings → Data API**, salin **Project URL** dan **anon public key**.
+---
 
-### 3. Isi file `.env`
+### Cara A — Supabase lokal (paling cepat, tanpa akun)
+
+Butuh **Docker Desktop** menyala. Seluruh stack (Postgres, Auth, Storage, Edge Runtime)
+berjalan di komputermu sendiri.
 
 ```bash
-cp .env.example .env
+npx supabase start
 ```
 
-Isi dua baris ini:
+Perintah itu menerapkan migrasi otomatis dan mencetak `API_URL` beserta `ANON_KEY`.
+Salin keduanya ke `.env`:
 
 ```
-EXPO_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
+EXPO_PUBLIC_SUPABASE_URL=http://192.168.x.x:54321
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY dari output di atas>
 EXPO_PUBLIC_AI_MODE=local
 ```
 
-> **Anon key aman berada di aplikasi.** Aksesnya dibatasi Row Level Security — tiap user hanya
-> bisa membaca barisnya sendiri. Yang **tidak boleh** masuk ke aplikasi adalah API key AI; itu
-> disimpan terpisah di Edge Function (langkah 5).
+> **Pakai IP LAN laptop, bukan `127.0.0.1`.** HP yang menjalankan Expo Go adalah perangkat
+> lain — `127.0.0.1` di sana menunjuk ke HP itu sendiri, bukan ke laptopmu. Cari IP-nya
+> dengan `ipconfig` (cari "IPv4 Address" pada adapter Wi-Fi). HP dan laptop harus satu Wi-Fi.
 
-### 4. Jalankan
+Alat bantu yang ikut menyala:
+
+| Alamat | Isinya |
+|---|---|
+| http://127.0.0.1:54323 | Studio — lihat & sunting isi database |
+| http://127.0.0.1:54324 | Kotak masuk email palsu, untuk menguji pendaftaran |
+
+Mengosongkan database kembali ke keadaan awal:
 
 ```bash
-npx expo start
+npx supabase db reset
+```
+
+Mematikan stack:
+
+```bash
+npx supabase stop
+```
+
+---
+
+### Cara B — Supabase cloud (untuk dipakai sehari-hari)
+
+Perlu ini kalau ingin app tetap jalan saat laptop mati, dan wajib kalau ingin men-deploy
+Edge Function.
+
+1. Buat project baru di [supabase.com](https://supabase.com).
+2. Terapkan skemanya — pilih salah satu:
+   ```bash
+   npx supabase link --project-ref <ref-project-kamu>
+   npx supabase db push
+   ```
+   atau tempel isi `supabase/migrations/20260820000000_init.sql` ke **SQL Editor**.
+3. Buka **Project Settings → Data API**, salin **Project URL** dan **anon public key** ke `.env`.
+
+> **Anon key aman berada di aplikasi.** Aksesnya dibatasi Row Level Security ditambah GRANT
+> tingkat tabel — tiap user hanya bisa menyentuh barisnya sendiri. Yang **tidak boleh** masuk
+> ke aplikasi adalah API key AI; itu disimpan sebagai secret Edge Function (langkah 5).
+
+---
+
+### Jalankan aplikasinya
+
+```bash
+npm start
 ```
 
 Scan QR dengan aplikasi **Expo Go** di HP. Daftar akun, lalu coba ketik `kopi 25rb`.
@@ -84,7 +124,7 @@ Sampai titik ini semuanya **gratis dan tanpa API key**.
 
 ---
 
-### 5. (Opsional) Aktifkan AI
+### (Opsional) Aktifkan AI
 
 Diperlukan untuk: kalimat rumit, input suara, chat tanya-jawab, dan ringkasan naratif.
 
@@ -158,7 +198,7 @@ src/
   store/data.tsx                 Satu sumber data untuk semua layar
 
 supabase/
-  schema.sql                     Tabel, RLS, seed kategori Indonesia
+  migrations/2026...init.sql     Tabel, GRANT, RLS, seed kategori Indonesia
   functions/_shared/providers.ts ★ Adapter provider — ganti AI tanpa ubah app
   functions/ai-parse/            Teks → transaksi terstruktur
   functions/ai-chat/             Tanya-jawab (dikirimi ringkasan, bukan data mentah)
@@ -174,8 +214,10 @@ supabase/
 
 - **API key AI tidak pernah masuk ke aplikasi.** Kalau ditaruh di app, siapa pun bisa membongkar
   APK dan memakai kuota/saldomu. Key hanya ada di Supabase Edge Function.
-- **Row Level Security aktif di semua tabel.** Setiap query difilter `auth.uid()`; user lain
-  mendapat nol baris, bukan sekadar disembunyikan di UI.
+- **Row Level Security + GRANT tingkat tabel di semua tabel.** Keduanya wajib dan sering
+  tertukar: GRANT menentukan boleh menyentuh tabelnya atau tidak, RLS menentukan baris mana
+  yang terlihat. Setiap query difilter `auth.uid()`; user lain mendapat nol baris, bukan
+  sekadar disembunyikan di UI. Role `anon` (belum login) tidak diberi akses sama sekali.
 - **Edge Function memverifikasi token user** sebelum melakukan apa pun (`requireUser`).
 - **Chat mengirim ringkasan angka, bukan transaksi mentah** — menekan biaya token sekaligus
   membatasi data pribadi yang keluar dari server.
@@ -206,6 +248,24 @@ Sudah tercakup: `25rb` / `50k` / `1,5jt` / `Rp 250.000`, angka polos (`makan 35`
 keyakinan diturunkan), `kemarin` / `tadi pagi` / `tanggal 12`, pemetaan `gopay`/`bca` ke dompet,
 pemisahan banyak transaksi dalam satu kalimat, dan pengecualian `"makan sama temen"` supaya tidak
 salah terbelah.
+
+---
+
+## Sudah diverifikasi terhadap database sungguhan
+
+Diuji pada 20 Agustus 2026 memakai stack Supabase lokal (Postgres 17), bukan tiruan:
+
+| Yang diuji | Hasil |
+|---|---|
+| Migrasi diterapkan | 7 tabel, 27 policy, trigger, bucket storage |
+| Daftar akun baru | Otomatis dapat 13 kategori + 3 dompet + profil |
+| User lain membaca data kita | 0 baris |
+| User lain menyamar (`user_id` orang lain) | Ditolak, kode 42501 |
+| Belum login | Ditolak, kode 42501 |
+| `"kemarin bensin 50k gopay, kopi 22rb, makan di warteg bu ani 35rb"` lewat UI | 3 transaksi tersimpan, tanggal mundur satu hari, kategori & dompet tepat, tanpa panggilan jaringan |
+
+Pengujian itulah yang menemukan bug GRANT: skema sempat menyalakan RLS tanpa memberi izin
+tabel, sehingga setiap query ditolak Postgres. Tidak akan pernah ketahuan dari unit test.
 
 ---
 
