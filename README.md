@@ -283,8 +283,23 @@ Keempat Edge Function juga dijalankan sungguhan di Edge Runtime Deno (`supabase 
 | `LLM_PROVIDER=claude` tanpa API key | Modul `npm:@anthropic-ai/sdk` termuat, jalur Claude tereksekusi sampai pengecekan key |
 | `STT_PROVIDER=groq` tanpa API key | Jalur Groq tereksekusi sampai pengecekan key |
 
-Yang **belum** terbukti: panggilan HTTP sebenarnya ke Anthropic/Gemini/Groq — itu butuh
-API key sungguhan.
+Belakangan keempatnya di-deploy ke cloud dan diuji dengan **API key Gemini sungguhan**:
+
+| Yang diuji | Hasil |
+|---|---|
+| `ai-parse` — `"tadi patungan bayar kado nikahan temen kantor, aku kebagian seratus dua puluh ribu, transfer lewat bca"` | Rp 120.000, kategori Sosial. Nominal ditulis dengan **huruf**, jadi parser lokal memang menyerah dan AI mengambil alih persis seperti rancangannya |
+| `ai-chat` — *"aku boros di mana bulan ini?"* | Menyebut angka persis dari data: Belanja Rp 450.000, Makan & Minum Rp 350.000 |
+| `ai-chat` — *"beli saham apa?"* | **Ditolak** dan diarahkan balik ke analisa pengeluaran, sesuai batasan di prompt |
+| `ai-insight` | 4 kalimat, angka persis dari temuan, ditutup satu saran konkret |
+| `ai-insight` panggilan kedua | Dilayani dari cache — tidak menyentuh Gemini |
+| `ai-transcribe` | Rekaman *"kemarin beli bensin lima puluh ribu pakai gopay"* → **"Kemarin beli bensin 50 ribu pakai GoPay"** |
+
+Pengujian itu menemukan dua hal. Pertama, model `gemini-2.5-flash` sudah pensiun untuk pengguna
+baru — karena nama model diambil dari env `GEMINI_MODEL`, perbaikannya hanya satu baris. Kedua,
+Gemini mengembalikan dompet `"BCA"` padahal dompet yang tersedia bernama `"Bank"`; pencocokan
+lama diam-diam menjatuhkannya ke dompet pertama sehingga transaksi tercatat di sumber dana yang
+salah. Diperbaiki di `src/lib/matching.ts`, yang kini berbagi kamus alias dengan parser lokal dan
+**mengosongkan** dompet ketika namanya tidak dikenali, bukan menebak.
 
 Seluruh rangkaian di atas diulang terhadap **project Supabase cloud sungguhan** (region Singapore,
 PostgreSQL 17.6) dan hasilnya sama: migrasi terpasang, trigger menyemai 13 kategori dan 3 dompet,

@@ -30,7 +30,7 @@ const INCOME_WORDS = [
 ];
 
 /** Alias metode bayar -> kata yang dicocokkan dengan nama dompet user. */
-const ACCOUNT_ALIASES: Record<string, string> = {
+export const ACCOUNT_ALIASES: Record<string, string> = {
   gopay: 'gopay', gojek: 'gopay',
   ovo: 'ovo',
   dana: 'dana',

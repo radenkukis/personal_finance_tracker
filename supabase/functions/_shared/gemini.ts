@@ -29,7 +29,7 @@ function apiKey(): string {
   return key;
 }
 
-const model = () => Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+const model = () => Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 
 /**
  * Gemini memakai bagian OpenAPI, bukan JSON Schema penuh: tidak mengenal

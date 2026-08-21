@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
+import { matchAccountId, matchCategoryId } from '@/lib/matching';
 import { useSession } from '@/store/session';
 import type { Account, Budget, Category, DraftTransaction, TransactionWithRefs } from '@/types/db';
 
@@ -214,40 +215,3 @@ function toDateOnly(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-/**
- * Nama kategori hasil tebakan -> id. Pencocokan longgar (abaikan besar-kecil
- * huruf dan spasi) karena AI kadang menulis "makan & minum" atau "Makan".
- */
-function matchCategoryId(
-  categories: readonly Category[],
-  name: string | null,
-  kind: string,
-): string | null {
-  const pool = categories.filter((c) => c.kind === kind);
-  if (pool.length === 0) return null;
-
-  if (name) {
-    const needle = name.toLowerCase().trim();
-    const exact = pool.find((c) => c.name.toLowerCase() === needle);
-    if (exact) return exact.id;
-    const partial = pool.find(
-      (c) => c.name.toLowerCase().includes(needle) || needle.includes(c.name.toLowerCase()),
-    );
-    if (partial) return partial.id;
-  }
-
-  // Tidak ketemu: jatuhkan ke "Lainnya" daripada menyimpan tanpa kategori.
-  return pool.find((c) => c.name === 'Lainnya')?.id ?? null;
-}
-
-function matchAccountId(accounts: readonly Account[], name: string | null): string | null {
-  if (accounts.length === 0) return null;
-  if (name) {
-    const needle = name.toLowerCase().trim();
-    const hit = accounts.find(
-      (a) => a.name.toLowerCase() === needle || a.name.toLowerCase().includes(needle),
-    );
-    if (hit) return hit.id;
-  }
-  return accounts[0]?.id ?? null;
-}
