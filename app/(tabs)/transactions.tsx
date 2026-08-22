@@ -4,15 +4,15 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Button, Divider, EmptyState, Field, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, Field, Txt, withAlpha } from '@/components/ui';
 import { TransactionRow } from '@/components/TransactionRow';
+import { TransactionFilters } from '@/components/TransactionFilters';
 import { useData } from '@/store/data';
 import { colors, radius, size, space } from '@/lib/theme';
 import { dayKey, relativeDay } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { activeFilterCount, applyFilters, EMPTY_FILTERS, type Filters } from '@/lib/filters';
 import type { TransactionWithRefs } from '@/types/db';
-
-type Filter = 'all' | 'expense' | 'income';
 
 export default function RiwayatScreen() {
   const insets = useSafeAreaInsets();
@@ -21,19 +21,14 @@ export default function RiwayatScreen() {
   const { money } = useMoney();
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const sections = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+  const activeCount = activeFilterCount(filters);
 
-    const filtered = transactions.filter((t) => {
-      if (filter !== 'all' && t.kind !== filter) return false;
-      if (!needle) return true;
-      return [t.merchant, t.note, t.category?.name, t.account?.name, t.raw_input]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(needle));
-    });
+  const { sections, total, count } = useMemo(() => {
+    const filtered = applyFilters(transactions, filters, query);
 
     // Dikelompokkan per hari, dengan total harian di judul kelompok —
     // pertanyaan "kemarin habis berapa" terjawab tanpa menjumlah sendiri.
@@ -45,73 +40,92 @@ export default function RiwayatScreen() {
       else groups.set(key, [t]);
     }
 
-    return [...groups.entries()].map(([key, data]) => ({
-      key,
-      title: relativeDay(new Date(data[0]!.occurred_at)),
-      total: data
+    return {
+      sections: [...groups.entries()].map(([key, data]) => ({
+        key,
+        title: relativeDay(new Date(data[0]!.occurred_at)),
+        total: data
+          .filter((t) => t.kind === 'expense')
+          .reduce((acc, t) => acc + Number(t.amount), 0),
+        data,
+      })),
+      // Total keseluruhan hasil penyaringan — inti gunanya memfilter.
+      total: filtered
         .filter((t) => t.kind === 'expense')
         .reduce((acc, t) => acc + Number(t.amount), 0),
-      data,
-    }));
-  }, [transactions, query, filter]);
+      count: filtered.length,
+    };
+  }, [transactions, query, filters]);
 
   function confirmDelete(tx: TransactionWithRefs) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Hapus transaksi?',
-      `${tx.merchant ?? tx.category?.name ?? 'Transaksi'} · ${money(Number(tx.amount))}`,
+      `${tx.merchant ?? tx.note ?? tx.category?.name ?? 'Transaksi'} · ${money(Number(tx.amount))}`,
       [
         { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: () => void deleteTransaction(tx.id),
-        },
+        { text: 'Hapus', style: 'destructive', onPress: () => void deleteTransaction(tx.id) },
       ],
     );
   }
 
+  const filtering = activeCount > 0 || query.trim().length > 0;
+
   return (
     <View style={{ flex: 1, paddingTop: insets.top + space.md }}>
       <View style={{ paddingHorizontal: space.lg, gap: space.md }}>
-        <Txt variant="title">Riwayat</Txt>
-
-        <Field
-          icon="search"
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Cari tempat, kategori, catatan…"
-          autoCapitalize="none"
-        />
-
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {(
-            [
-              ['all', 'Semua'],
-              ['expense', 'Keluar'],
-              ['income', 'Masuk'],
-            ] as const
-          ).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => setFilter(value)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: filter === value }}
-              style={{
-                paddingHorizontal: space.lg,
-                paddingVertical: 7,
-                borderRadius: radius.pill,
-                backgroundColor: filter === value ? colors.accentDim : colors.surfaceRaised,
-                borderWidth: 1,
-                borderColor: filter === value ? colors.accent : 'transparent',
-              }}
-            >
-              <Txt variant="caption" color={filter === value ? colors.accent : colors.textMuted}>
-                {label}
-              </Txt>
-            </Pressable>
-          ))}
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <Txt variant="title">Riwayat</Txt>
+          {filtering ? (
+            <Txt variant="caption" color={colors.textFaint}>
+              {count} transaksi · {money(total)}
+            </Txt>
+          ) : null}
         </View>
+
+        <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              icon="search"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Cari tempat, catatan, kategori…"
+              autoCapitalize="none"
+            />
+          </View>
+          <Pressable
+            onPress={() => setShowFilters((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="Penyaring"
+            accessibilityState={{ expanded: showFilters }}
+            style={[
+              styles.filterBtn,
+              (showFilters || activeCount > 0) && {
+                borderColor: colors.accent,
+                backgroundColor: withAlpha(colors.accent, 0.12),
+              },
+            ]}
+          >
+            <Feather
+              name="sliders"
+              size={16}
+              color={activeCount > 0 ? colors.accent : colors.textMuted}
+            />
+            {activeCount > 0 ? (
+              <View style={styles.badge}>
+                <Txt variant="caption" color={colors.bg}>
+                  {activeCount}
+                </Txt>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+
+        {showFilters ? (
+          <Card>
+            <TransactionFilters value={filters} onChange={setFilters} />
+          </Card>
+        ) : null}
       </View>
 
       <SectionList
@@ -123,6 +137,7 @@ export default function RiwayatScreen() {
           paddingBottom: size.tabBarHeight + space.xxl,
         }}
         stickySectionHeadersEnabled={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -155,20 +170,34 @@ export default function RiwayatScreen() {
             ]}
           >
             {index > 0 ? <Divider /> : null}
-            <TransactionRow tx={item} onPress={() => confirmDelete(item)} />
+            <TransactionRow
+              tx={item}
+              onPress={() => router.push({ pathname: '/edit/[id]', params: { id: item.id } })}
+              onLongPress={() => confirmDelete(item)}
+            />
           </View>
         )}
         ListEmptyComponent={
           <EmptyState
-            icon={query ? 'search' : 'inbox'}
-            title={query ? 'Tidak ada yang cocok' : 'Belum ada transaksi'}
+            icon={filtering ? 'search' : 'inbox'}
+            title={filtering ? 'Tidak ada yang cocok' : 'Belum ada transaksi'}
             body={
-              query
-                ? 'Coba kata kunci lain, atau ubah filternya.'
+              filtering
+                ? 'Coba longgarkan penyaringnya, atau pakai kata kunci lain.'
                 : 'Semua yang kamu catat akan muncul di sini, dikelompokkan per hari.'
             }
             action={
-              query ? undefined : (
+              filtering ? (
+                <Button
+                  title="Bersihkan penyaring"
+                  variant="secondary"
+                  icon="rotate-ccw"
+                  onPress={() => {
+                    setFilters(EMPTY_FILTERS);
+                    setQuery('');
+                  }}
+                />
+              ) : (
                 <Button title="Catat sekarang" icon="plus" onPress={() => router.push('/add')} />
               )
             }
@@ -180,7 +209,7 @@ export default function RiwayatScreen() {
         <View style={styles.hint}>
           <Feather name="info" size={11} color={colors.textFaint} />
           <Txt variant="caption" color={colors.textFaint}>
-            Ketuk transaksi untuk menghapus
+            Ketuk untuk mengubah · tekan lama untuk menghapus
           </Txt>
         </View>
       ) : null}
@@ -195,6 +224,28 @@ const styles = {
     alignItems: 'center' as const,
     marginTop: space.lg,
     marginBottom: space.sm,
+  },
+  filterBtn: {
+    width: size.touchMin,
+    height: size.touchMin,
+    borderRadius: radius.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.hairlineStrong,
+  },
+  badge: {
+    position: 'absolute' as const,
+    top: 4,
+    right: 4,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    paddingHorizontal: 3,
+    backgroundColor: colors.accent,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   card: {
     backgroundColor: colors.surface,

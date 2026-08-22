@@ -11,8 +11,10 @@
 import {
   buildParseSystemPrompt,
   buildParseUserPrompt,
+  CHAT_SCHEMA_GEMINI,
   CHAT_SYSTEM_PROMPT,
   INSIGHT_SYSTEM_PROMPT,
+  type ChatResult,
   type ParsedTx,
   type PromptContext,
 } from './prompts.ts';
@@ -130,8 +132,8 @@ export async function geminiChat(
   question: string,
   dataSummary: string,
   history: { role: 'user' | 'assistant'; content: string }[],
-): Promise<string> {
-  return await call({
+): Promise<ChatResult> {
+  const raw = await call({
     systemInstruction: { parts: [{ text: CHAT_SYSTEM_PROMPT }] },
     contents: [
       // Gemini memakai "model", bukan "assistant", untuk giliran balasan.
@@ -141,11 +143,28 @@ export async function geminiChat(
       })),
       {
         role: 'user',
-        parts: [{ text: `Data keuangan saya saat ini:\n${dataSummary}\n\nPertanyaan: ${question}` }],
+        parts: [{ text: `Data keuangan saya saat ini:\n${dataSummary}\n\nPesan: ${question}` }],
       },
     ],
-    generationConfig: { temperature: 0.3 },
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: CHAT_SCHEMA_GEMINI,
+      temperature: 0.3,
+    },
   });
+
+  try {
+    const parsed = JSON.parse(raw) as ChatResult;
+    return {
+      type: parsed.type === 'amendment' && parsed.amendment ? 'amendment' : 'answer',
+      answer: parsed.answer ?? null,
+      amendment: parsed.amendment ?? null,
+    };
+  } catch {
+    // Jawaban yang tidak berbentuk JSON masih berguna sebagai teks biasa,
+    // jadi jangan dibuang begitu saja.
+    return { type: 'answer', answer: raw, amendment: null };
+  }
 }
 
 // ---------------------------------------------------------------------

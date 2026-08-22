@@ -29,9 +29,11 @@ const ICONS: Record<string, FeatherName> = {
 export function TransactionRow({
   tx,
   onPress,
+  onLongPress,
 }: {
   tx: TransactionWithRefs;
   onPress?: () => void;
+  onLongPress?: () => void;
 }) {
   const { signed } = useMoney();
   const color = tx.category?.color ?? colors.textFaint;
@@ -56,6 +58,8 @@ export function TransactionRow({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
       style={({ pressed }) => [
         {
           height: size.rowHeight,

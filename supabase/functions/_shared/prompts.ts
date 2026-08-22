@@ -208,10 +208,76 @@ export function buildParseUserPrompt(text: string, ctx: PromptContext): string {
 // Chat keuangan
 // ---------------------------------------------------------------------
 
+/**
+ * Hasil chat: menjawab pertanyaan, ATAU mengusulkan perubahan satu transaksi.
+ * Perubahan tidak pernah langsung diterapkan — aplikasi menampilkan
+ * sebelum/sesudah dulu dan menunggu user menekan konfirmasi.
+ */
+export interface ChatResult {
+  type: 'answer' | 'amendment';
+  answer: string | null;
+  amendment: {
+    transaction_id: string;
+    /** Hanya kolom yang benar-benar berubah; sisanya null. */
+    amount: number | null;
+    merchant: string | null;
+    note: string | null;
+    category_name: string | null;
+    kind: 'expense' | 'income' | null;
+    /** Kalimat singkat: apa yang diubah dan kenapa transaksi itu yang dipilih. */
+    explanation: string;
+  } | null;
+}
+
+export const CHAT_SCHEMA_GEMINI = {
+  type: 'OBJECT',
+  properties: {
+    type: { type: 'STRING', enum: ['answer', 'amendment'] },
+    answer: { type: 'STRING', nullable: true },
+    amendment: {
+      type: 'OBJECT',
+      nullable: true,
+      properties: {
+        transaction_id: { type: 'STRING' },
+        amount: { type: 'NUMBER', nullable: true },
+        merchant: { type: 'STRING', nullable: true },
+        note: { type: 'STRING', nullable: true },
+        category_name: { type: 'STRING', nullable: true },
+        kind: { type: 'STRING', enum: ['expense', 'income'], nullable: true },
+        explanation: { type: 'STRING' },
+      },
+      required: ['transaction_id', 'explanation'],
+    },
+  },
+  required: ['type'],
+};
+
 export const CHAT_SYSTEM_PROMPT = [
   'Kamu asisten keuangan pribadi di dalam aplikasi pencatat pengeluaran, berbahasa Indonesia.',
   '',
-  'CARA MENJAWAB:',
+  'Kamu punya DUA mode. Pilih salah satu untuk setiap pesan:',
+  '',
+  'MODE "answer" — untuk pertanyaan.',
+  'Isi field answer, dan amendment = null.',
+  '',
+  'MODE "amendment" — ketika user MEMINTA MENGUBAH sebuah transaksi.',
+  'Contoh: "ubah kopi tadi jadi 30rb", "yang bensin kemarin harusnya transport",',
+  '"ganti catatan yang di petshop jadi vitamin kucing".',
+  'Isi field amendment, dan answer = null.',
+  '',
+  'ATURAN MODE AMENDMENT:',
+  '- transaction_id HARUS diambil persis dari daftar transaksi yang diberikan.',
+  '  Jangan pernah mengarang id.',
+  '- Isi HANYA kolom yang benar-benar diubah. Kolom lain biarkan null.',
+  '- Bila lebih dari satu transaksi mungkin cocok, JANGAN menebak. Pakai mode',
+  '  answer dan tanyakan yang mana, sebutkan pilihannya beserta nominal dan tanggalnya.',
+  '- Bila tidak ada transaksi yang cocok sama sekali, pakai mode answer dan katakan begitu.',
+  '- explanation ditulis singkat: apa yang berubah dan kenapa transaksi itu yang dipilih.',
+  '- Kamu TIDAK bisa menghapus atau membuat transaksi lewat chat, hanya mengubah.',
+  '  Bila user memintanya, arahkan ke tombol tambah atau tekan lama untuk menghapus.',
+  '',
+  '',
+  'CARA MENJAWAB (mode answer):',
   '- Jawab singkat dan langsung ke inti. Dua sampai empat kalimat sudah cukup untuk kebanyakan pertanyaan.',
   '- Selalu sebutkan angka nyata dari data yang diberikan. Jangan menjawab dengan nasihat umum.',
   '- Bila data yang dibutuhkan tidak ada, katakan terus terang bahwa datanya belum cukup.',

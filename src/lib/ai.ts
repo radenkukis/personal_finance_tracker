@@ -122,12 +122,43 @@ export async function transcribeAudio(base64: string, mimeType: string): Promise
   return result.text;
 }
 
+/**
+ * Usulan perubahan satu transaksi dari chat. Tidak pernah langsung diterapkan:
+ * aplikasi menampilkan sebelum/sesudah dan menunggu konfirmasi user.
+ */
+export interface Amendment {
+  transaction_id: string;
+  amount: number | null;
+  merchant: string | null;
+  note: string | null;
+  category_name: string | null;
+  kind: 'expense' | 'income' | null;
+  explanation: string;
+}
+
+export interface ChatReply {
+  answer: string | null;
+  amendment: Amendment | null;
+}
+
 export async function askQuestion(
   question: string,
   history: { role: 'user' | 'assistant'; content: string }[],
-): Promise<string> {
-  const result = await callFunction<{ answer: string }>('ai-chat', { question, history });
-  return result.answer;
+): Promise<ChatReply> {
+  const result = await callFunction<{
+    answer: string | null;
+    amendment: Amendment | null;
+    type: 'answer' | 'amendment';
+  }>('ai-chat', { question, history });
+
+  // Usulan tanpa id tidak bisa ditindaklanjuti — perlakukan sebagai jawaban
+  // biasa daripada memunculkan kartu konfirmasi yang tombolnya tidak bekerja.
+  const amendment =
+    result.type === 'amendment' && result.amendment?.transaction_id
+      ? result.amendment
+      : null;
+
+  return { answer: result.answer, amendment };
 }
 
 export async function summarizeFindings(findings: readonly Finding[]): Promise<string> {

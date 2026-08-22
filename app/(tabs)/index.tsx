@@ -149,7 +149,7 @@ export default function BerandaScreen() {
               {d.recent.map((tx, i) => (
                 <View key={tx.id}>
                   {i > 0 ? <Divider /> : null}
-                  <TransactionRow tx={tx} onPress={() => router.push('/transactions')} />
+                  <TransactionRow tx={tx} onPress={() => router.push({ pathname: '/edit/[id]', params: { id: tx.id } })} />
                 </View>
               ))}
             </Card>

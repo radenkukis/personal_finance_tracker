@@ -1,16 +1,24 @@
 /**
- * Konfirmasi hasil parsing sebelum masuk database.
+ * Editor satu transaksi, dipakai di tiga tempat berbeda:
  *
- * AI tidak pernah menulis langsung. Setiap hasil ditampilkan sebagai draft
- * yang bisa diubah, dan yang keyakinannya rendah ditandai jelas. Ini yang
- * membedakan "AI membantu" dari "AI diam-diam mengisi data yang salah".
+ *   1. Konfirmasi hasil AI/parser sebelum disimpan
+ *   2. Isi manual dari nol
+ *   3. Menyunting transaksi yang sudah tersimpan
+ *
+ * Satu bentuk untuk ketiganya bukan sekadar hemat kode: user cuma perlu
+ * belajar satu tata letak, dan perbaikan di satu tempat langsung terasa di
+ * semua jalur.
+ *
+ * AI tidak pernah menulis langsung. Hasilnya selalu lewat sini dulu, dan yang
+ * keyakinannya rendah ditandai jelas.
  */
-import { useMemo } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Feather } from '@expo/vector-icons';
 import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
-import { relativeDay } from '@/lib/format';
+import { clockTime, relativeDay } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
 import { sameCategoryName } from '@/lib/categories';
 import type { Category, DraftTransaction } from '@/types/db';
@@ -31,19 +39,19 @@ export function DraftReviewSheet({
   return (
     <View style={{ gap: space.sm }}>
       {drafts.map((draft, i) => (
-        <DraftCard
+        <TransactionEditorCard
           key={`${draft.raw_input}-${i}`}
           draft={draft}
           categories={categories}
           onChange={(patch) => onChange(i, patch)}
-          onRemove={() => onRemove(i)}
+          onRemove={drafts.length > 1 ? () => onRemove(i) : undefined}
         />
       ))}
     </View>
   );
 }
 
-function DraftCard({
+export function TransactionEditorCard({
   draft,
   categories,
   onChange,
@@ -52,19 +60,24 @@ function DraftCard({
   draft: DraftTransaction;
   categories: readonly Category[];
   onChange: (patch: Partial<DraftTransaction>) => void;
-  onRemove: () => void;
+  /** Disembunyikan saat hanya ada satu draft — membuang semuanya tidak berguna. */
+  onRemove?: () => void;
 }) {
   const { currency } = useMoney();
+  const [picking, setPicking] = useState<'date' | 'time' | null>(null);
+
   const uncertain = draft.confidence < LOW_CONFIDENCE;
+  const occurred = useMemo(() => new Date(draft.occurred_at), [draft.occurred_at]);
+
   const pool = useMemo(
     () => categories.filter((c) => c.kind === draft.kind),
     [categories, draft.kind],
   );
 
   /*
-   * Usulan hanya berlaku selama namanya memang belum ada. Begitu user
-   * memilih kategori lama dari deretan chip, `category_name` berubah dan
-   * usulannya otomatis lenyap — tidak ada kategori yang terlanjur dibuat.
+   * Usulan hanya berlaku selama namanya memang belum ada. Begitu user memilih
+   * kategori lama dari deretan chip, `category_name` berubah dan usulannya
+   * lenyap — tidak ada kategori yang terlanjur dibuat.
    */
   const proposed =
     draft.category_is_new && draft.category_name
@@ -72,15 +85,17 @@ function DraftCard({
         ? null
         : draft.category_name
       : null;
+
   return (
     <Card style={uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : undefined}>
-      {/* Baris atas: jenis, nominal, hapus */}
+      {/* Jenis, nominal, hapus */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
         <Pressable
           onPress={() =>
             onChange({
               kind: draft.kind === 'expense' ? 'income' : 'expense',
               category_name: null,
+              category_is_new: false,
             })
           }
           accessibilityLabel="Ganti jenis transaksi"
@@ -108,15 +123,18 @@ function DraftCard({
               value={groupWith(draft.amount, currency.group)}
               onChangeText={(v) => onChange({ amount: parseDigits(v) })}
               keyboardType="number-pad"
+              selectTextOnFocus
               style={[type.displaySm, { color: colors.text, flex: 1, padding: 0 }]}
               accessibilityLabel="Nominal transaksi"
             />
           </View>
         </View>
 
-        <Pressable onPress={onRemove} accessibilityLabel="Hapus draft ini" hitSlop={10}>
-          <Feather name="x" size={18} color={colors.textFaint} />
-        </Pressable>
+        {onRemove ? (
+          <Pressable onPress={onRemove} accessibilityLabel="Hapus draft ini" hitSlop={10}>
+            <Feather name="x" size={18} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
       </View>
 
       {uncertain ? (
@@ -132,15 +150,25 @@ function DraftCard({
         <Divider />
       </View>
 
-      {/* Nama tempat */}
-      <TextInput
-        value={draft.merchant ?? ''}
-        onChangeText={(v) => onChange({ merchant: v.trim() ? v : null })}
-        placeholder="Nama tempat (opsional)"
-        placeholderTextColor={colors.textFaint}
-        style={[type.body, styles.merchantInput]}
-        accessibilityLabel="Nama tempat"
-      />
+      {/* Tempat & catatan */}
+      <View style={{ gap: space.sm }}>
+        <TextInput
+          value={draft.merchant ?? ''}
+          onChangeText={(v) => onChange({ merchant: v.trim() ? v : null })}
+          placeholder="Nama tempat (opsional)"
+          placeholderTextColor={colors.textFaint}
+          style={[type.body, styles.input]}
+          accessibilityLabel="Nama tempat"
+        />
+        <TextInput
+          value={draft.note ?? ''}
+          onChangeText={(v) => onChange({ note: v.trim() ? v : null })}
+          placeholder="Catatan — beli apa persisnya (opsional)"
+          placeholderTextColor={colors.textFaint}
+          style={[type.body, styles.input]}
+          accessibilityLabel="Catatan"
+        />
+      </View>
 
       {/* Kategori */}
       <Txt variant="overline" color={colors.textFaint} style={{ marginTop: space.md }}>
@@ -156,7 +184,7 @@ function DraftCard({
             onPress={() => onChange({ category_is_new: true, category_name: proposed })}
             accessibilityRole="button"
             accessibilityState={{ selected: true }}
-            accessibilityLabel={'Kategori baru ' + proposed}
+            accessibilityLabel={`Kategori baru ${proposed}`}
             style={[
               styles.chip,
               styles.newChip,
@@ -175,18 +203,15 @@ function DraftCard({
           </Pressable>
         ) : null}
 
-        {pool.map((c) => {
-          const active = !proposed && c.name === draft.category_name;
-          return (
-            <Chip
-              key={c.id}
-              label={c.name}
-              active={active}
-              color={c.color}
-              onPress={() => onChange({ category_name: c.name, category_is_new: false })}
-            />
-          );
-        })}
+        {pool.map((c) => (
+          <Chip
+            key={c.id}
+            label={c.name}
+            active={!proposed && c.name === draft.category_name}
+            color={c.color}
+            onPress={() => onChange({ category_name: c.name, category_is_new: false })}
+          />
+        ))}
       </ScrollView>
 
       {proposed ? (
@@ -197,13 +222,63 @@ function DraftCard({
       ) : null}
 
       {/* Waktu */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-        <Feather name="clock" size={12} color={colors.textFaint} />
-        <Txt variant="caption" color={colors.textFaint}>
-          {relativeDay(new Date(draft.occurred_at))}
-        </Txt>
+      <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
+        <Pressable
+          onPress={() => setPicking('date')}
+          accessibilityLabel="Ganti tanggal"
+          style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
+        >
+          <Feather name="calendar" size={13} color={colors.textFaint} />
+          <Txt variant="caption">{relativeDay(occurred)}</Txt>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setPicking('time')}
+          accessibilityLabel="Ganti jam"
+          style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
+        >
+          <Feather name="clock" size={13} color={colors.textFaint} />
+          <Txt variant="caption">{clockTime(occurred)}</Txt>
+        </Pressable>
       </View>
 
+      {picking ? (
+        <DateTimePicker
+          value={occurred}
+          mode={picking}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          // Mencatat pengeluaran di masa depan tidak masuk akal; yang wajar
+          // justru mengisi yang terlewat beberapa hari lalu.
+          maximumDate={new Date()}
+          onChange={(event, picked) => {
+            if (Platform.OS !== 'ios') setPicking(null);
+            if (event.type === 'dismissed' || !picked) return;
+
+            // Pemilih tanggal hanya mengubah tanggalnya, pemilih jam hanya
+            // jamnya. Tanpa penjagaan ini, memilih tanggal akan mereset jam
+            // ke 00:00 dan urutan transaksi hari itu jadi berantakan.
+            const next = new Date(occurred);
+            if (picking === 'date') {
+              next.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
+            } else {
+              next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+            }
+            onChange({ occurred_at: next.toISOString() });
+          }}
+        />
+      ) : null}
+
+      {picking && Platform.OS === 'ios' ? (
+        <Pressable
+          onPress={() => setPicking(null)}
+          style={styles.doneBtn}
+          accessibilityLabel="Selesai memilih waktu"
+        >
+          <Txt variant="caption" color={colors.accent}>
+            Selesai
+          </Txt>
+        </Pressable>
+      ) : null}
     </Card>
   );
 }
@@ -257,7 +332,7 @@ const styles = {
     gap: 5,
     marginTop: space.sm,
   },
-  merchantInput: {
+  input: {
     color: colors.text,
     backgroundColor: colors.surfaceRaised,
     borderRadius: radius.sm,
@@ -280,5 +355,21 @@ const styles = {
     borderRadius: radius.pill,
     paddingHorizontal: 6,
     paddingVertical: 1,
+  },
+  timeBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.hairlineStrong,
+  },
+  doneBtn: {
+    alignSelf: 'flex-end' as const,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
   },
 };

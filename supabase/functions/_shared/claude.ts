@@ -9,9 +9,11 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import {
   buildParseSystemPrompt,
   buildParseUserPrompt,
+  CHAT_SCHEMA_GEMINI,
   CHAT_SYSTEM_PROMPT,
   INSIGHT_SYSTEM_PROMPT,
   TRANSACTION_SCHEMA,
+  type ChatResult,
   type ParsedTx,
   type PromptContext,
 } from './prompts.ts';
@@ -92,7 +94,7 @@ export async function claudeChat(
   question: string,
   dataSummary: string,
   history: { role: 'user' | 'assistant'; content: string }[],
-): Promise<string> {
+): Promise<ChatResult> {
   const response = await client().messages.create({
     model: MODEL_CHAT,
     max_tokens: 1024,
@@ -104,14 +106,64 @@ export async function claudeChat(
     output_config: { effort: 'low' },
     messages: [
       ...history,
-      { role: 'user', content: `Data keuangan saya saat ini:\n${dataSummary}\n\nPertanyaan: ${question}` },
+      { role: 'user', content: `Data keuangan saya saat ini:\n${dataSummary}\n\nPesan: ${question}` },
     ],
+    tools: [
+      {
+        name: 'balas',
+        description: 'Menjawab pertanyaan, atau mengusulkan perubahan satu transaksi.',
+        input_schema: toJsonSchema(CHAT_SCHEMA_GEMINI) as unknown as Anthropic.Tool['input_schema'],
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'balas' },
   });
 
   if (response.stop_reason === 'refusal') {
-    return 'Maaf, pertanyaan itu tidak bisa saya jawab. Coba tanyakan soal pengeluaran atau budget kamu.';
+    return {
+      type: 'answer',
+      answer: 'Maaf, pesan itu tidak bisa saya proses. Coba tanyakan soal pengeluaran atau budget kamu.',
+      amendment: null,
+    };
   }
-  return textOf(response);
+
+  for (const block of response.content) {
+    if (block.type === 'tool_use') {
+      const input = block.input as ChatResult;
+      return {
+        type: input.type === 'amendment' && input.amendment ? 'amendment' : 'answer',
+        answer: input.answer ?? null,
+        amendment: input.amendment ?? null,
+      };
+    }
+  }
+  return { type: 'answer', answer: textOf(response), amendment: null };
+}
+
+/**
+ * Skema chat ditulis sekali dalam gaya OpenAPI milik Gemini; Claude memakai
+ * JSON Schema biasa. Diterjemahkan di sini supaya aturannya tidak ditulis dua
+ * kali dan tidak bisa berbeda diam-diam.
+ */
+function toJsonSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toJsonSchema);
+  if (typeof node !== 'object' || node === null) return node;
+
+  const src = node as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(src)) {
+    if (key === 'type' && typeof value === 'string') {
+      const lower = value.toLowerCase();
+      out.type = src.nullable === true ? [lower, 'null'] : lower;
+    } else if (key === 'nullable') {
+      continue;
+    } else if (key === 'properties' || key === 'items') {
+      out[key] = toJsonSchema(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------

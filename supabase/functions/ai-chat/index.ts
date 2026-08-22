@@ -15,12 +15,17 @@ const MAX_QUESTION_CHARS = 500;
 const MAX_HISTORY_TURNS = 6;
 
 interface TxRow {
+  id: string;
   amount: number;
   kind: string;
   occurred_at: string;
   merchant: string | null;
+  note: string | null;
   categories: { name: string } | null;
 }
+
+/** Sebanyak ini transaksi terbaru dikirim berikut id-nya, agar bisa diubah. */
+const AMENDABLE_LIMIT = 25;
 
 Deno.serve(serveAuthed(async (req, ctx) => {
   const body = await req.json().catch(() => null) as {
@@ -37,9 +42,14 @@ Deno.serve(serveAuthed(async (req, ctx) => {
   const summary = await buildSummary(ctx);
   const history = (body?.history ?? []).slice(-MAX_HISTORY_TURNS);
 
-  const answer = await chat(question, summary, history);
+  const result = await chat(question, summary, history);
 
-  return json({ answer, provider: llmProvider() });
+  return json({
+    answer: result.answer,
+    amendment: result.amendment,
+    type: result.type,
+    provider: llmProvider(),
+  });
 }));
 
 /**
@@ -55,7 +65,7 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
   const [txResult, budgetResult, profileResult] = await Promise.all([
     ctx.db
       .from('transactions')
-      .select('amount, kind, occurred_at, merchant, categories(name)')
+      .select('id, amount, kind, occurred_at, merchant, note, categories(name)')
       .gte('occurred_at', prevStart.toISOString())
       .order('occurred_at', { ascending: false }),
     ctx.db.from('budgets').select('amount, categories(name)').eq('period', dateOnly(monthStart)),
@@ -85,6 +95,24 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
     for (const b of budgets) {
       const name = b.categories?.name ?? '(tanpa kategori)';
       lines.push(`${name}: budget ${b.amount}, terpakai ${spent.get(name) ?? 0}`);
+    }
+  }
+
+  /*
+   * Daftar berikut membawa id, dan itulah satu-satunya sumber id yang boleh
+   * dipakai model saat mengusulkan perubahan. Tanpa daftar ini model akan
+   * mengarang id dan perubahannya menunjuk transaksi yang tidak ada.
+   */
+  const amendable = rows.slice(0, AMENDABLE_LIMIT);
+  if (amendable.length > 0) {
+    lines.push('', '== TRANSAKSI TERBARU (pakai id ini bila diminta mengubah) ==');
+    for (const t of amendable) {
+      const label = t.merchant ?? t.note ?? t.categories?.name ?? 'tanpa nama';
+      lines.push(
+        `id=${t.id} | ${t.occurred_at.slice(0, 10)} | ${label} | ` +
+          `${t.categories?.name ?? 'tanpa kategori'} | ${t.kind} | ${t.amount}` +
+          (t.note && t.merchant ? ` | catatan: ${t.note}` : ''),
+      );
     }
   }
 

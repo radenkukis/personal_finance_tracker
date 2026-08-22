@@ -12,23 +12,32 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Card, EmptyState, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, size, space, type } from '@/lib/theme';
-import { aiMode, askQuestion } from '@/lib/ai';
+import { aiMode, askQuestion, type Amendment } from '@/lib/ai';
+import { AmendmentCard } from '@/components/AmendmentCard';
+import { useData } from '@/store/data';
+import { sameCategoryName } from '@/lib/categories';
 
 interface Turn {
   role: 'user' | 'assistant';
   content: string;
+  /**
+   * Giliran yang membawa usulan perubahan dirender sebagai kartu
+   * sebelum/sesudah, bukan gelembung teks biasa.
+   */
+  amendment?: Amendment;
 }
 
 const SARAN = [
   'Aku boros di mana bulan ini?',
   'Bandingkan pengeluaranku bulan ini dengan bulan lalu',
   'Kategori apa yang paling naik?',
-  'Apa yang bisa kupangkas minggu depan?',
+  'Ubah transaksi terakhir jadi 30rb',
 ];
 
 export default function TanyaScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const { transactions, categories, updateTransaction } = useData();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
@@ -51,8 +60,21 @@ export default function TanyaScreen() {
       requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
 
       try {
-        const answer = await askQuestion(trimmed, history);
-        setTurns((prev) => [...prev, { role: 'assistant', content: answer }]);
+        const reply = await askQuestion(
+          trimmed,
+          // Riwayat yang dikirim balik hanya berisi teks — kartu usulan tidak
+          // perlu ikut, karena hasilnya sudah tercermin di data.
+          history.map((t) => ({ role: t.role, content: t.content })),
+        );
+
+        setTurns((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: reply.answer ?? reply.amendment?.explanation ?? '',
+            ...(reply.amendment ? { amendment: reply.amendment } : {}),
+          },
+        ]);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Gagal menghubungi AI.');
       } finally {
@@ -61,6 +83,33 @@ export default function TanyaScreen() {
       }
     },
     [busy, turns],
+  );
+
+  /** Menerapkan usulan setelah user menekan Konfirmasi di kartu. */
+  const applyAmendment = useCallback(
+    async (a: Amendment) => {
+      const target = transactions.find((t) => t.id === a.transaction_id);
+      if (!target) throw new Error('Transaksinya sudah tidak ada.');
+
+      const patch: Record<string, unknown> = { was_corrected: true };
+      if (a.amount !== null) patch.amount = a.amount;
+      if (a.kind !== null) patch.kind = a.kind;
+      if (a.merchant !== null) patch.merchant = a.merchant;
+      if (a.note !== null) patch.note = a.note;
+
+      if (a.category_name !== null) {
+        const kind = a.kind ?? target.kind;
+        const category = categories.find(
+          (c) => c.kind === kind && sameCategoryName(c.name, a.category_name!),
+        );
+        // Kategori yang tidak dikenali lebih baik diabaikan daripada
+        // mengosongkan kategori yang sudah benar.
+        if (category) patch.category_id = category.id;
+      }
+
+      await updateTransaction(a.transaction_id, patch);
+    },
+    [transactions, categories, updateTransaction],
   );
 
   if (!available) {
@@ -117,7 +166,25 @@ export default function TanyaScreen() {
             </View>
           </View>
         ) : (
-          turns.map((turn, i) => <Bubble key={i} turn={turn} />)
+          turns.map((turn, i) =>
+            turn.amendment ? (
+              <AmendmentCard
+                key={i}
+                amendment={turn.amendment}
+                transaction={transactions.find((t) => t.id === turn.amendment!.transaction_id)}
+                onConfirm={() => applyAmendment(turn.amendment!)}
+                onCancel={() =>
+                  setTurns((prev) =>
+                    prev.map((t, idx) =>
+                      idx === i ? { role: t.role, content: 'Baik, tidak jadi diubah.' } : t,
+                    ),
+                  )
+                }
+              />
+            ) : (
+              <Bubble key={i} turn={turn} />
+            ),
+          )
         )}
 
         {busy ? (
@@ -162,7 +229,7 @@ export default function TanyaScreen() {
   );
 }
 
-function Bubble({ turn }: { turn: Turn }) {
+function Bubble({ turn }: { turn: { role: 'user' | 'assistant'; content: string } }) {
   const isUser = turn.role === 'user';
   return (
     <View

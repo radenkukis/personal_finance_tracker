@@ -36,7 +36,8 @@
         {
           "microphonePermission": "Arta memakai mikrofon agar kamu bisa mencatat transaksi dengan berbicara."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

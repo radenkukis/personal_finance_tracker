@@ -20,6 +20,24 @@ import type { DraftTransaction } from '@/types/db';
 
 const CONTOH = ['kopi 25rb', 'bensin 50k gopay', 'kemarin makan di padang 45rb', 'gajian 8jt'];
 
+/** Draft kosong untuk jalur isi manual — tidak lewat parser sama sekali. */
+function draftKosong(): DraftTransaction {
+  return {
+    kind: 'expense',
+    amount: 0,
+    merchant: null,
+    note: null,
+    occurred_at: new Date().toISOString(),
+    category_name: null,
+    category_is_new: false,
+    account_name: null,
+    // Bukan tebakan siapa pun, jadi tidak perlu ditandai "kurang yakin".
+    confidence: 1,
+    source: 'manual',
+    raw_input: '',
+  };
+}
+
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -139,6 +157,9 @@ export default function AddScreen() {
   // -------------------------------------------------------------------
 
   const total = drafts?.reduce((acc, d) => acc + d.amount, 0) ?? 0;
+  const manualEntry = drafts?.every((d) => d.source === 'manual') ?? false;
+  // Nominal nol berarti user belum mengisi apa pun — jangan biarkan tersimpan.
+  const canSave = (drafts?.length ?? 0) > 0 && drafts!.every((d) => d.amount > 0);
 
   return (
     <KeyboardAvoidingView
@@ -160,9 +181,9 @@ export default function AddScreen() {
           <>
             <View style={styles.badgeRow}>
               <Badge
-                icon={usedAI ? 'cpu' : 'zap'}
-                label={usedAI ? 'Diurai AI' : 'Diurai di HP · gratis'}
-                color={usedAI ? colors.info : colors.accent}
+                icon={manualEntry ? 'edit-3' : usedAI ? 'cpu' : 'zap'}
+                label={manualEntry ? 'Isi manual' : usedAI ? 'Diurai AI' : 'Diurai di HP · gratis'}
+                color={manualEntry ? colors.textMuted : usedAI ? colors.info : colors.accent}
               />
               <Badge
                 icon="layers"
@@ -218,6 +239,27 @@ export default function AddScreen() {
               </View>
             </View>
 
+            <Pressable
+              onPress={() => {
+                setDrafts([draftKosong()]);
+                setUsedAI(false);
+                setStatus(null);
+                setError(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Isi manual"
+              style={({ pressed }) => [styles.manualBtn, pressed && { borderColor: colors.accent }]}
+            >
+              <Feather name="edit-3" size={15} color={colors.textMuted} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="bodyStrong">Isi manual</Txt>
+                <Txt variant="caption" color={colors.textFaint}>
+                  Ketik sendiri nominal, kategori, dan tanggalnya
+                </Txt>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.textFaint} />
+            </Pressable>
+
             {!voiceAvailable ? (
               <Txt variant="caption" color={colors.textFaint}>
                 Mode gratis aktif — semua diurai di HP tanpa internet. Input suara butuh AI
@@ -260,6 +302,7 @@ export default function AddScreen() {
               icon="check"
               onPress={save}
               loading={busy}
+              disabled={!canSave}
               style={{ flex: 1 }}
             />
           </>
@@ -341,6 +384,16 @@ const styles = {
     textAlignVertical: 'top' as const,
     padding: 0,
     lineHeight: 22,
+  },
+  manualBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.hairline,
   },
   sample: {
     paddingHorizontal: space.md,
