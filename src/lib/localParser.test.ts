@@ -157,6 +157,18 @@ describe('parseLocal — kasus sederhana', () => {
     expect(drafts[0]!.category_name).toBe('Tagihan');
   });
 
+  it('kata kunci harus cocok sebagai kata utuh', () => {
+    // "makan" TIDAK boleh cocok di dalam "makanan kucing" — itu belanja
+    // hewan peliharaan, bukan makan siang.
+    const { drafts } = parse('beli makanan kucing 120rb');
+    expect(drafts[0]!.category_name).toBeNull();
+  });
+
+  it('tetap cocok bila katanya memang berdiri sendiri', () => {
+    expect(parse('makan siang 25rb').drafts[0]!.category_name).toBe('Makan & Minum');
+    expect(parse('beli kopi 25rb').drafts[0]!.category_name).toBe('Makan & Minum');
+  });
+
   it('memilih kata kunci paling spesifik', () => {
     // "token listrik" lebih panjang daripada "listrik", jadi itu yang menang.
     const { drafts } = parse('token listrik 100rb');

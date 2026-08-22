@@ -17,8 +17,21 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import { matchAccountId, matchCategoryId } from '@/lib/matching';
+import {
+  deriveKeywords,
+  nextCategoryColor,
+  normalizeCategoryName,
+  sameCategoryName,
+} from '@/lib/categories';
 import { useSession } from '@/store/session';
-import type { Account, Budget, Category, DraftTransaction, TransactionWithRefs } from '@/types/db';
+import type {
+  Account,
+  Budget,
+  Category,
+  DraftTransaction,
+  TransactionWithRefs,
+  TxKind,
+} from '@/types/db';
 
 /** Jendela data yang ditarik ke HP. Cukup untuk deteksi langganan (3 bulan). */
 const HISTORY_DAYS = 150;
@@ -36,6 +49,18 @@ interface DataState {
   deleteTransaction: (id: string) => Promise<void>;
   /** Menyimpan koreksi kategori supaya tebakan berikutnya lebih akurat. */
   recordCorrection: (rawInput: string, predicted: string | null, correct: string) => Promise<void>;
+  createCategory: (input: NewCategory) => Promise<Category>;
+  updateCategory: (id: string, patch: Partial<Category>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  /** Berapa transaksi yang memakai kategori ini — ditanyakan sebelum menghapus. */
+  countTransactionsIn: (categoryId: string) => number;
+}
+
+export interface NewCategory {
+  name: string;
+  kind: TxKind;
+  color?: string;
+  keywords?: string[];
 }
 
 const Ctx = createContext<DataState | null>(null);
@@ -135,6 +160,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (drafts: DraftTransaction[]) => {
       if (!userId || drafts.length === 0) return 0;
 
+      /*
+       * Kategori usulan AI dibuat DULU, sebelum transaksinya disimpan.
+       * Urutannya penting: tanpa itu transaksi tersimpan menunjuk kategori
+       * yang belum ada, lalu jatuh ke "Lainnya" — usulannya hilang padahal
+       * user sudah menyetujuinya.
+       */
+      const pending = new Map<string, { name: string; kind: TxKind; draft: DraftTransaction }>();
+      for (const d of drafts) {
+        if (!d.category_is_new || !d.category_name) continue;
+        const name = normalizeCategoryName(d.category_name);
+        const exists = categories.some((c) => c.kind === d.kind && sameCategoryName(c.name, name));
+        if (exists) continue;
+        pending.set(d.kind + '::' + name.toLowerCase(), { name, kind: d.kind, draft: d });
+      }
+
+      let pool = categories;
+      if (pending.size > 0) {
+        const usedColors = categories.map((c) => c.color);
+        const fresh = [...pending.values()].map(({ name, kind, draft }) => {
+          const color = nextCategoryColor(usedColors);
+          usedColors.push(color);
+          return {
+            user_id: userId,
+            name,
+            kind,
+            color,
+            keywords: deriveKeywords(name, draft.note, draft.merchant),
+            sort_order: 500,
+          };
+        });
+
+        const { data: created, error: createError } = await supabase
+          .from('categories')
+          .insert(fresh)
+          .select();
+        if (createError) throw new Error(createError.message);
+        pool = [...categories, ...((created ?? []) as Category[])];
+      }
+
       const rows = drafts.map((d) => ({
         user_id: userId,
         kind: d.kind,
@@ -145,7 +209,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         source: d.source,
         raw_input: d.raw_input,
         ai_confidence: d.confidence,
-        category_id: matchCategoryId(categories, d.category_name, d.kind),
+        category_id: matchCategoryId(pool, d.category_name, d.kind),
         account_id: matchAccountId(accounts, d.account_name),
       }));
 
@@ -178,6 +242,67 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const createCategory = useCallback(
+    async (input: NewCategory) => {
+      if (!userId) throw new Error('Belum masuk.');
+      const name = normalizeCategoryName(input.name);
+      if (!name) throw new Error('Nama kategori tidak boleh kosong.');
+      if (categories.some((c) => c.kind === input.kind && sameCategoryName(c.name, name))) {
+        throw new Error('Kategori "' + name + '" sudah ada.');
+      }
+
+      const { data, error: createError } = await supabase
+        .from('categories')
+        .insert({
+          user_id: userId,
+          name,
+          kind: input.kind,
+          color: input.color ?? nextCategoryColor(categories.map((c) => c.color)),
+          keywords: input.keywords ?? deriveKeywords(name),
+          sort_order: 500,
+        })
+        .select()
+        .single();
+      if (createError) throw new Error(createError.message);
+
+      await refresh();
+      return data as Category;
+    },
+    [userId, categories, refresh],
+  );
+
+  const updateCategory = useCallback(
+    async (id: string, patch: Partial<Category>) => {
+      const columns: Record<string, unknown> = {};
+      if (patch.name !== undefined) columns.name = normalizeCategoryName(patch.name);
+      if (patch.color !== undefined) columns.color = patch.color;
+      if (patch.keywords !== undefined) columns.keywords = patch.keywords;
+      if (Object.keys(columns).length === 0) return;
+
+      const { error: updateError } = await supabase.from('categories').update(columns).eq('id', id);
+      if (updateError) throw new Error(updateError.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteCategory = useCallback(
+    async (id: string) => {
+      // Skema memakai `on delete set null`, jadi transaksinya TIDAK ikut
+      // terhapus — hanya kehilangan label kategorinya. Itu disengaja:
+      // kehilangan catatan uang jauh lebih buruk daripada kehilangan label.
+      const { error: deleteError } = await supabase.from('categories').delete().eq('id', id);
+      if (deleteError) throw new Error(deleteError.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const countTransactionsIn = useCallback(
+    (categoryId: string) => transactions.filter((t) => t.category_id === categoryId).length,
+    [transactions],
+  );
+
   const recordCorrection = useCallback(
     async (rawInput: string, predicted: string | null, correct: string) => {
       if (!userId) return;
@@ -204,6 +329,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateTransaction,
       deleteTransaction,
       recordCorrection,
+      createCategory,
+      updateCategory,
+      deleteCategory,
+      countTransactionsIn,
     }),
     [
       accounts,
@@ -217,6 +346,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateTransaction,
       deleteTransaction,
       recordCorrection,
+      createCategory,
+      updateCategory,
+      deleteCategory,
+      countTransactionsIn,
     ],
   );
 

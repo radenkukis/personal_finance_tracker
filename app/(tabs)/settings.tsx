@@ -6,6 +6,7 @@ import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha }
 import { colors, size, space } from '@/lib/theme';
 import { useMoney } from '@/hooks/useMoney';
 import { CurrencyPicker } from '@/components/CurrencyPicker';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { aiMode, summarizeFindings } from '@/lib/ai';
 import { useSession } from '@/store/session';
@@ -18,6 +19,7 @@ export default function AturScreen() {
   const { categories, transactions } = useData();
   const dashboard = useDashboard();
   const { money, currency } = useMoney();
+  const router = useRouter();
 
   const [payday, setPayday] = useState(String(profile?.payday_day ?? 25));
   const [saving, setSaving] = useState(false);
@@ -161,6 +163,49 @@ export default function AturScreen() {
           </Card>
         </View>
       ) : null}
+
+      {/* --- Kategori ----------------------------------------------------- */}
+      <View>
+        <SectionLabel
+          right={
+            <Txt variant="caption" color={colors.textFaint}>
+              {categories.length}
+            </Txt>
+          }
+        >
+          Kategori
+        </SectionLabel>
+        <Pressable
+          onPress={() => router.push('/categories')}
+          accessibilityRole="button"
+          accessibilityLabel="Kelola kategori"
+          style={({ pressed }) => [
+            {
+              backgroundColor: pressed ? colors.surfacePressed : colors.surface,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              padding: space.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.md,
+            },
+          ]}
+        >
+          <IconBadge name="tag" color={colors.accent} diameter={34} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="bodyStrong">Kelola kategori</Txt>
+            <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
+              Tambah, ubah nama, warna, dan kata kunci
+            </Txt>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.textFaint} />
+        </Pressable>
+        <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm, lineHeight: 17 }}>
+          Kata kunci menentukan apa yang bisa dikenali tanpa AI — makin cocok
+          dengan caramu menulis, makin sering catatanmu diurai gratis dan seketika.
+        </Txt>
+      </View>
 
       {/* --- Mata uang ---------------------------------------------------- */}
       <View>

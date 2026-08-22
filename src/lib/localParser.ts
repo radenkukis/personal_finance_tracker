@@ -397,7 +397,7 @@ export function matchCategory(
     if (c.kind !== kind) continue;
     for (const keyword of c.keywords) {
       const k = keyword.toLowerCase();
-      if (!k || !lowerSegment.includes(k)) continue;
+      if (!k || !containsWord(lowerSegment, k)) continue;
       // Kata kunci lebih panjang lebih spesifik: "token listrik" mengalahkan "listrik".
       if (k.length > bestScore) {
         bestScore = k.length;
@@ -406,6 +406,20 @@ export function matchCategory(
     }
   }
   return best;
+}
+
+/**
+ * Kata kunci harus cocok sebagai KATA UTUH, bukan potongan.
+ *
+ * Dengan pencocokan potongan, "makan" cocok di dalam "makanan kucing" dan
+ * pengeluaran hewan peliharaan tercatat sebagai Makan & Minum. Pola yang sama
+ * membuat "nasi" cocok di "nasib" dan "kopi" di "kopiah". Salah kategori
+ * diam-diam lebih buruk daripada tidak berkategori: yang kedua kelihatan dan
+ * bisa dibetulkan, yang pertama merusak grafik tanpa ada yang sadar.
+ */
+function containsWord(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(haystack);
 }
 
 export function matchAccount(lowerSegment: string, accounts: readonly Account[]): string | null {

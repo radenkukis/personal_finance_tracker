@@ -90,6 +90,12 @@ export interface DraftTransaction {
   occurred_at: string;
   /** Nama kategori hasil tebakan; dipetakan ke id saat disimpan. */
   category_name: string | null;
+  /**
+   * AI mengusulkan kategori yang belum ada. Kategorinya baru benar-benar
+   * dibuat kalau user menyimpan draft ini — AI tidak pernah menambah
+   * kategori diam-diam.
+   */
+  category_is_new?: boolean;
   /** Nama dompet hasil tebakan (mis. "GoPay"). */
   account_name: string | null;
   /** 0..1 — di bawah 0.6 ditandai "perlu dicek" di UI. */

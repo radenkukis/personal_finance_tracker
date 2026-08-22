@@ -12,6 +12,7 @@ import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
 import { relativeDay } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { sameCategoryName } from '@/lib/categories';
 import type { Category, DraftTransaction } from '@/types/db';
 
 const LOW_CONFIDENCE = 0.6;
@@ -59,6 +60,18 @@ function DraftCard({
     () => categories.filter((c) => c.kind === draft.kind),
     [categories, draft.kind],
   );
+
+  /*
+   * Usulan hanya berlaku selama namanya memang belum ada. Begitu user
+   * memilih kategori lama dari deretan chip, `category_name` berubah dan
+   * usulannya otomatis lenyap — tidak ada kategori yang terlanjur dibuat.
+   */
+  const proposed =
+    draft.category_is_new && draft.category_name
+      ? pool.some((c) => sameCategoryName(c.name, draft.category_name!))
+        ? null
+        : draft.category_name
+      : null;
   return (
     <Card style={uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : undefined}>
       {/* Baris atas: jenis, nominal, hapus */}
@@ -138,19 +151,50 @@ function DraftCard({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 6, paddingVertical: space.sm }}
       >
+        {proposed ? (
+          <Pressable
+            onPress={() => onChange({ category_is_new: true, category_name: proposed })}
+            accessibilityRole="button"
+            accessibilityState={{ selected: true }}
+            accessibilityLabel={'Kategori baru ' + proposed}
+            style={[
+              styles.chip,
+              styles.newChip,
+              { backgroundColor: withAlpha(colors.accent, 0.18), borderColor: colors.accent },
+            ]}
+          >
+            <Feather name="plus" size={11} color={colors.accent} />
+            <Txt variant="caption" color={colors.accent}>
+              {proposed}
+            </Txt>
+            <View style={styles.newBadge}>
+              <Txt variant="caption" color={colors.bg}>
+                baru
+              </Txt>
+            </View>
+          </Pressable>
+        ) : null}
+
         {pool.map((c) => {
-          const active = c.name === draft.category_name;
+          const active = !proposed && c.name === draft.category_name;
           return (
             <Chip
               key={c.id}
               label={c.name}
               active={active}
               color={c.color}
-              onPress={() => onChange({ category_name: c.name })}
+              onPress={() => onChange({ category_name: c.name, category_is_new: false })}
             />
           );
         })}
       </ScrollView>
+
+      {proposed ? (
+        <Txt variant="caption" color={colors.textFaint} style={{ lineHeight: 16 }}>
+          Kategori baru akan dibuat saat kamu menyimpan. Pilih kategori lain di
+          sampingnya kalau tidak jadi.
+        </Txt>
+      ) : null}
 
       {/* Waktu */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -225,5 +269,16 @@ const styles = {
     paddingVertical: 6,
     borderRadius: radius.pill,
     borderWidth: 1,
+  },
+  newChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+  },
+  newBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
 };

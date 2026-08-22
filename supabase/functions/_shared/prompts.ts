@@ -14,6 +14,8 @@ export interface ParsedTx {
   /** ISO 8601. */
   occurred_at: string;
   category_name: string | null;
+  /** true bila `category_name` adalah kategori baru yang diusulkan. */
+  category_is_new: boolean;
   account_name: string | null;
   /** 0..1 — seberapa yakin model terhadap hasilnya. */
   confidence: number;
@@ -52,7 +54,15 @@ export const TRANSACTION_SCHEMA = {
           },
           category_name: {
             type: ['string', 'null'],
-            description: 'HARUS persis salah satu nama kategori dari daftar yang diberikan.',
+            description:
+              'Nama kategori dari daftar yang diberikan, atau nama kategori baru bila ' +
+              'benar-benar tidak ada yang cocok.',
+          },
+          category_is_new: {
+            type: 'boolean',
+            description:
+              'true HANYA bila category_name belum ada di daftar. false untuk semua ' +
+              'kategori yang sudah ada.',
           },
           account_name: {
             type: ['string', 'null'],
@@ -65,7 +75,7 @@ export const TRANSACTION_SCHEMA = {
         },
         required: [
           'kind', 'amount', 'merchant', 'note', 'occurred_at',
-          'category_name', 'account_name', 'confidence',
+          'category_name', 'category_is_new', 'account_name', 'confidence',
         ],
         additionalProperties: false,
       },
@@ -122,8 +132,17 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     'ATURAN KATEGORI:',
     `- Kategori pengeluaran yang tersedia: ${expenseCats.join(', ')}.`,
     `- Kategori pemasukan yang tersedia: ${incomeCats.join(', ')}.`,
-    '- category_name HARUS persis salah satu dari daftar di atas. Jangan mengarang kategori baru.',
-    '- Bila benar-benar tidak cocok ke mana pun, pakai "Lainnya".',
+    '- Bila cocok dengan salah satu kategori di atas, pakai namanya PERSIS dan set category_is_new = false.',
+    '- Kamu BOLEH mengusulkan kategori baru, tapi hanya bila pengeluarannya jelas termasuk',
+    '  tema yang belum terwakili sama sekali dan kemungkinan akan berulang.',
+    '  Contoh sah: "Hewan Peliharaan", "Olahraga", "Perawatan Diri".',
+    '  Saat mengusulkan, set category_is_new = true.',
+    '- Nama kategori usulan harus UMUM, bukan nama barang. "Hewan Peliharaan", bukan',
+    '  "Makanan Kucing". "Olahraga", bukan "Sewa Lapangan Futsal".',
+    '- JANGAN mengusulkan kategori yang artinya mirip kategori yang sudah ada.',
+    '  Ada "Transport"? Jangan usulkan "Transportasi" atau "Kendaraan".',
+    '- Ragu sedikit pun, JANGAN mengusulkan. Pakai "Lainnya" dan set category_is_new = false.',
+    '  Kategori yang terlalu banyak membuat grafik tidak terbaca.',
     '- JANGAN memecah kategori karena variasi barang. "boba A", "boba B", dan "boba C"',
     '  ketiganya tetap masuk kategori minuman/makanan yang sama; yang membedakan',
     '  cukup ditulis di field note. Kategori dipakai untuk melihat pola pengeluaran,',
