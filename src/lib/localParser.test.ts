@@ -93,6 +93,35 @@ describe('splitSegments', () => {
     ]);
   });
 
+  it('memotong di batas nominal walau tanpa pemisah sama sekali', () => {
+    // Bentuk yang sangat wajar diketik orang, dan dulu selalu dilempar ke AI.
+    expect(splitSegments('sarapan 18rb makan siang 42rb bensin 50rb')).toEqual([
+      'sarapan 18rb',
+      'makan siang 42rb',
+      'bensin 50rb',
+    ]);
+  });
+
+  it('menempelkan sisa teks ke potongan terakhir', () => {
+    expect(splitSegments('kopi 25rb bensin 50rb pakai gopay')).toEqual([
+      'kopi 25rb',
+      'bensin 50rb pakai gopay',
+    ]);
+  });
+
+  it('metode bayar tetap milik nominal sebelumnya', () => {
+    expect(splitSegments('bensin 50rb gopay nonton 90rb')).toEqual([
+      'bensin 50rb gopay',
+      'nonton 90rb',
+    ]);
+  });
+
+  it('TIDAK memotong bila ada nominal yang tidak eksplisit', () => {
+    // "2" di sini jumlah barang, bukan uang. Memotong akan melahirkan
+    // transaksi Rp 2.000 yang tidak pernah ada.
+    expect(splitSegments('beli 2 tiket 75rb')).toEqual(['beli 2 tiket 75rb']);
+  });
+
   it('memotong pada "dan" bila kedua sisi punya nominal', () => {
     expect(splitSegments('beli baju 150rb dan sepatu 300rb')).toEqual([
       'beli baju 150rb',
@@ -187,6 +216,16 @@ describe('parseLocal — tanggal', () => {
 });
 
 describe('parseLocal — banyak transaksi sekaligus', () => {
+  it('menguraikan empat transaksi tanpa koma, tanpa memanggil AI', () => {
+    const { drafts, needsAI } = parse(
+      'sarapan 18rb makan padang 42rb bensin 50rb gopay nonton 90rb',
+    );
+
+    expect(needsAI).toBe(false);
+    expect(drafts.map((d) => d.amount)).toEqual([18_000, 42_000, 50_000, 90_000]);
+    expect(drafts[2]!.account_name).toBe('GoPay');
+  });
+
   it('memecah tiga transaksi dari satu kalimat', () => {
     const { drafts, needsAI } = parse('kemarin bensin 50k, kopi 22k, parkir 5k');
 

@@ -13,6 +13,16 @@ import type { PromptContext } from '../_shared/prompts.ts';
 /** Batas panjang input: menjaga biaya dan menghalangi penyalahgunaan. */
 const MAX_INPUT_CHARS = 1_000;
 
+/** Ukuran prompt ikut dilaporkan — penyebab lambat paling sering di sini. */
+function buildSize(ctx: PromptContext): number {
+  return (
+    ctx.categories.length * 20 +
+    ctx.accounts.join('').length +
+    ctx.knownMerchants.join('').length +
+    ctx.corrections.map((c) => c.raw_input + c.correct_category).join('').length
+  );
+}
+
 Deno.serve(serveAuthed(async (req, ctx) => {
   const body = await req.json().catch(() => null) as { text?: string; timezone?: string } | null;
   const text = body?.text?.trim();
@@ -22,6 +32,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     return fail(`Teks terlalu panjang (maksimal ${MAX_INPUT_CHARS} karakter).`);
   }
 
+  const tDb = Date.now();
   const [categories, accounts, corrections, merchants] = await Promise.all([
     ctx.db.from('categories').select('name, kind').order('sort_order'),
     ctx.db.from('accounts').select('name').eq('is_archived', false),
@@ -53,6 +64,8 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     knownMerchants.push(name);
   }
 
+  const dbMs = Date.now() - tDb;
+
   const promptContext: PromptContext = {
     categories: categories.data ?? [],
     accounts: (accounts.data ?? []).map((a: { name: string }) => a.name),
@@ -62,7 +75,15 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     timezone: body?.timezone ?? 'Asia/Jakarta',
   };
 
+  const tAi = Date.now();
   const transactions = await parseText(text, promptContext);
+  const aiMs = Date.now() - tAi;
 
-  return json({ transactions, provider: llmProvider() });
+  // Waktu tiap tahap ikut dikirim supaya pelambatan bisa ditelusuri tanpa
+  // menebak-nebak: berapa lama ambil data, berapa lama model menjawab.
+  return json({
+    transactions,
+    provider: llmProvider(),
+    timing: { dbMs, aiMs, promptChars: buildSize(promptContext) },
+  });
 }));

@@ -31,6 +31,9 @@ function apiKey(): string {
 
 const model = () => Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 
+/** Model yang lebih ringan bisa dipilih khusus untuk parsing lewat env. */
+const parseModel = () => Deno.env.get('GEMINI_PARSE_MODEL') ?? model();
+
 /**
  * Gemini memakai bagian OpenAPI, bukan JSON Schema penuh: tidak mengenal
  * `additionalProperties` maupun tipe gabungan ["string","null"]. Karena itu
@@ -68,8 +71,8 @@ interface GeminiPart {
   inlineData?: { mimeType: string; data: string };
 }
 
-async function call(body: unknown): Promise<string> {
-  const res = await fetch(`${ENDPOINT}/${model()}:generateContent?key=${apiKey()}`, {
+async function call(body: unknown, modelName: string = model()): Promise<string> {
+  const res = await fetch(`${ENDPOINT}/${modelName}:generateContent?key=${apiKey()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -103,8 +106,12 @@ export async function geminiParse(text: string, ctx: PromptContext): Promise<Par
       responseMimeType: 'application/json',
       responseSchema: GEMINI_TX_SCHEMA,
       temperature: 0,
+      // Mengurai kalimat menjadi kolom-kolom adalah tugas mekanis, bukan tugas
+      // menalar. Membiarkan model "berpikir" dulu menambah belasan detik tanpa
+      // membuat hasilnya lebih benar — dan input harian harus terasa instan.
+      thinkingConfig: { thinkingLevel: 'low' },
     },
-  });
+  }, parseModel());
 
   try {
     const parsed = JSON.parse(raw) as { transactions?: ParsedTx[] };

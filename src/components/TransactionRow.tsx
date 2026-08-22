@@ -47,7 +47,7 @@ export function TransactionRow({
   const title = merchant || note || tx.category?.name || 'Tanpa kategori';
 
   // Note hanya diulang di baris bawah bila belum dipakai sebagai judul.
-  const subtitle = [note && merchant ? note : null, tx.category?.name, tx.account?.name,
+  const subtitle = [note && merchant ? note : null, tx.category?.name,
     clockTime(new Date(tx.occurred_at))].filter(Boolean).join(' · ');
 
   // Hasil AI dengan keyakinan rendah ditandai supaya user tahu perlu dicek.

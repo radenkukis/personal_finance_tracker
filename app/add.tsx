@@ -174,7 +174,6 @@ export default function AddScreen() {
             <DraftReviewSheet
               drafts={drafts}
               categories={categories}
-              accounts={accounts}
               onChange={(i, patch) =>
                 setDrafts((prev) =>
                   prev ? prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)) : prev,

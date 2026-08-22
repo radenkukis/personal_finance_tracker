@@ -15,7 +15,7 @@ import { useDashboard } from '@/hooks/useDashboard';
 export default function AturScreen() {
   const insets = useSafeAreaInsets();
   const { profile, signOut, refreshProfile, session } = useSession();
-  const { accounts, categories, transactions } = useData();
+  const { categories, transactions } = useData();
   const dashboard = useDashboard();
   const { money, currency } = useMoney();
 
@@ -233,29 +233,6 @@ export default function AturScreen() {
               loading={saving}
             />
           </View>
-        </Card>
-      </View>
-
-      {/* --- Dompet ------------------------------------------------------- */}
-      <View>
-        <SectionLabel right={<Txt variant="caption" color={colors.textFaint}>{accounts.length}</Txt>}>
-          Dompet
-        </SectionLabel>
-        <Card padded={false} style={{ overflow: 'hidden' }}>
-          {accounts.map((a, i) => (
-            <View key={a.id}>
-              {i > 0 ? <Divider /> : null}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md }}>
-                <IconBadge name="credit-card" color={colors.textMuted} diameter={30} />
-                <Txt variant="bodyStrong" style={{ flex: 1 }}>
-                  {a.name}
-                </Txt>
-                <Txt variant="caption" color={colors.textFaint}>
-                  {a.kind}
-                </Txt>
-              </View>
-            </View>
-          ))}
         </Card>
       </View>
 

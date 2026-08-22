@@ -160,7 +160,7 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     lines.push(
       '',
       'NAMA TEMPAT YANG SUDAH DIPAKAI USER INI — samakan ejaannya bila mirip:',
-      ctx.knownMerchants.slice(0, 40).join(', ') + '.',
+      ctx.knownMerchants.slice(0, 25).join(', ') + '.',
     );
   }
 
@@ -168,7 +168,7 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     lines.push(
       '',
       'KOREKSI YANG PERNAH DIBUAT USER INI — ikuti pola pilihan mereka:',
-      ...ctx.corrections.slice(0, 15).map((c) => `- "${c.raw_input}" seharusnya kategori "${c.correct_category}"`),
+      ...ctx.corrections.slice(0, 8).map((c) => `- "${c.raw_input}" seharusnya kategori "${c.correct_category}"`),
     );
   }
 

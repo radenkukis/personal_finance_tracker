@@ -12,20 +12,18 @@ import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
 import { relativeDay } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
-import type { Account, Category, DraftTransaction } from '@/types/db';
+import type { Category, DraftTransaction } from '@/types/db';
 
 const LOW_CONFIDENCE = 0.6;
 
 export function DraftReviewSheet({
   drafts,
   categories,
-  accounts,
   onChange,
   onRemove,
 }: {
   drafts: readonly DraftTransaction[];
   categories: readonly Category[];
-  accounts: readonly Account[];
   onChange: (index: number, patch: Partial<DraftTransaction>) => void;
   onRemove: (index: number) => void;
 }) {
@@ -36,7 +34,6 @@ export function DraftReviewSheet({
           key={`${draft.raw_input}-${i}`}
           draft={draft}
           categories={categories}
-          accounts={accounts}
           onChange={(patch) => onChange(i, patch)}
           onRemove={() => onRemove(i)}
         />
@@ -48,13 +45,11 @@ export function DraftReviewSheet({
 function DraftCard({
   draft,
   categories,
-  accounts,
   onChange,
   onRemove,
 }: {
   draft: DraftTransaction;
   categories: readonly Category[];
-  accounts: readonly Account[];
   onChange: (patch: Partial<DraftTransaction>) => void;
   onRemove: () => void;
 }) {
@@ -64,9 +59,6 @@ function DraftCard({
     () => categories.filter((c) => c.kind === draft.kind),
     [categories, draft.kind],
   );
-  const activeColor =
-    pool.find((c) => c.name === draft.category_name)?.color ?? colors.textFaint;
-
   return (
     <Card style={uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : undefined}>
       {/* Baris atas: jenis, nominal, hapus */}
@@ -160,32 +152,14 @@ function DraftCard({
         })}
       </ScrollView>
 
-      {/* Dompet & waktu */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 2 }}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
-          style={{ flex: 1 }}
-        >
-          {accounts.map((a) => (
-            <Chip
-              key={a.id}
-              label={a.name}
-              active={a.name === draft.account_name}
-              color={activeColor}
-              onPress={() => onChange({ account_name: a.name })}
-            />
-          ))}
-        </ScrollView>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Feather name="clock" size={12} color={colors.textFaint} />
-          <Txt variant="caption" color={colors.textFaint}>
-            {relativeDay(new Date(draft.occurred_at))}
-          </Txt>
-        </View>
+      {/* Waktu */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+        <Feather name="clock" size={12} color={colors.textFaint} />
+        <Txt variant="caption" color={colors.textFaint}>
+          {relativeDay(new Date(draft.occurred_at))}
+        </Txt>
       </View>
+
     </Card>
   );
 }

@@ -141,8 +141,78 @@ export function splitSegments(text: string): string[] {
         continue;
       }
     }
+    // Belum terpisah juga: potong tepat setelah tiap nominal.
+    // "sarapan 18rb makan siang 42rb bensin 50rb" tanpa koma sama sekali
+    // adalah bentuk yang sangat wajar diketik orang, dan sebelumnya selalu
+    // dilempar ke AI — belasan detik untuk sesuatu yang bisa instan.
+    const byAmount = splitAtAmountBoundaries(piece);
+    if (byAmount) {
+      out.push(...byAmount);
+      continue;
+    }
+
     out.push(piece);
   }
+  return out;
+}
+
+/**
+ * Mengembalikan null bila pemotongan tidak aman.
+ *
+ * Syaratnya SEMUA nominal harus eksplisit (bersatuan rb/jt/k, atau sudah
+ * >= 1000). Tanpa syarat itu, "beli 2 tiket 75rb" akan terpotong menjadi
+ * "beli 2" — melahirkan transaksi Rp 2.000 yang tidak pernah ada. Kalimat
+ * seperti itu memang lebih aman diserahkan ke AI.
+ */
+function splitAtAmountBoundaries(piece: string): string[] | null {
+  const amounts = findAmounts(piece);
+  if (amounts.length < 2) return null;
+  if (!amounts.every((a) => a.explicit)) return null;
+
+  const parts: string[] = [];
+  let start = 0;
+  for (const a of amounts) {
+    const chunk = piece.slice(start, a.end).trim();
+    if (!chunk) return null;
+    parts.push(chunk);
+    start = a.end;
+  }
+
+  // Sisa teks setelah nominal terakhir ("... 90rb pakai gopay") ditempelkan
+  // ke potongan terakhir, bukan dibuang.
+  const tail = piece.slice(start).trim();
+  if (tail && parts.length > 0) {
+    parts[parts.length - 1] = `${parts[parts.length - 1]} ${tail}`;
+  }
+
+  return reattachTrailingPayment(parts);
+}
+
+/** Kata yang menempel pada nominal SEBELUMNYA, bukan yang sesudahnya. */
+const TRAILING_WORDS = new Set([...Object.keys(ACCOUNT_ALIASES), 'pakai', 'pake', 'via', 'lewat']);
+
+/**
+ * "bensin 50rb gopay nonton 90rb" dipotong tepat setelah nominal, sehingga
+ * "gopay" terlempar ke potongan berikutnya dan tercatat sebagai dompet untuk
+ * "nonton". Metode bayar selalu milik nominal sebelumnya, jadi kata-kata itu
+ * dikembalikan ke tempatnya.
+ */
+function reattachTrailingPayment(parts: string[]): string[] {
+  const out = [...parts];
+
+  for (let i = 1; i < out.length; i++) {
+    const words = out[i]!.split(/\s+/);
+    const moved: string[] = [];
+
+    while (words.length > 1 && TRAILING_WORDS.has(words[0]!.toLowerCase())) {
+      moved.push(words.shift()!);
+    }
+    if (moved.length === 0) continue;
+
+    out[i - 1] = `${out[i - 1]} ${moved.join(' ')}`;
+    out[i] = words.join(' ');
+  }
+
   return out;
 }
 
@@ -156,6 +226,8 @@ interface FoundAmount {
   raw: string;
   /** Satuan ditulis eksplisit (rb/jt/k) atau nilainya sudah >= 1000. */
   explicit: boolean;
+  /** Posisi karakter tepat setelah nominal, untuk memotong kalimat. */
+  end: number;
 }
 
 /**
@@ -179,18 +251,19 @@ export function findAmounts(segment: string): FoundAmount[] {
   while ((match = AMOUNT_RE.exec(masked)) !== null) {
     const [raw, digits, suffix] = match;
     if (!digits) continue;
+    const end = match.index + raw.length;
 
     const base = parseIndonesianNumber(digits);
     if (base === null || base <= 0) continue;
 
     const unit = suffix?.toLowerCase();
     if (unit && MULTIPLIERS[unit]) {
-      out.push({ value: base * MULTIPLIERS[unit]!, raw, explicit: true });
+      out.push({ value: base * MULTIPLIERS[unit]!, raw, explicit: true, end });
     } else if (base >= BARE_NUMBER_THOUSAND_CUTOFF) {
-      out.push({ value: base, raw, explicit: true });
+      out.push({ value: base, raw, explicit: true, end });
     } else {
       // "makan 35" -> 35.000, tapi ditandai tidak eksplisit.
-      out.push({ value: base * 1_000, raw, explicit: false });
+      out.push({ value: base * 1_000, raw, explicit: false, end });
     }
   }
   return out;
