@@ -328,8 +328,15 @@ bocor karena RLS tetap memblokir, tetapi lapisan keduanya hilang — diperbaiki 
 
 ## Catatan teknis
 
+- Proyek memakai **Expo SDK 54**, bukan yang terbaru. Alasannya praktis: Expo Go menaikkan
+  syarat versi iOS dari waktu ke waktu, sehingga iPhone lama hanya bisa memasang Expo Go yang
+  mendukung SDK 54. Memakai SDK terbaru berarti aplikasi tidak bisa dibuka sama sekali di
+  perangkat itu. Tidak ada fitur yang dikorbankan — expo-router 6, expo-audio, dan
+  expo-file-system 19 semuanya tersedia di SDK 54.
+- `expo-status-bar` tidak boleh dicantumkan di `plugins` pada SDK 54 (bukan config plugin di
+  versi ini); mencantumkannya membuat build gagal.
 - `.npmrc` menyetel `legacy-peer-deps=true` karena `react-dom` (jalur web, tidak dipakai di HP)
-  menuntut versi `react` yang berbeda dari yang dikunci Expo SDK 57.
+  menuntut versi `react` yang berbeda dari yang dikunci Expo.
 - Jest memakai transform Babel biasa di lingkungan Node, bukan preset React Native penuh —
   modul yang diuji murni TypeScript tanpa impor React Native, jadi preset berat itu hanya
   menambah kerapuhan.
