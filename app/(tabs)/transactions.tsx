@@ -8,7 +8,8 @@ import { Button, Divider, EmptyState, Field, Txt } from '@/components/ui';
 import { TransactionRow } from '@/components/TransactionRow';
 import { useData } from '@/store/data';
 import { colors, radius, size, space } from '@/lib/theme';
-import { dayKey, relativeDay, rupiah } from '@/lib/format';
+import { dayKey, relativeDay } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 import type { TransactionWithRefs } from '@/types/db';
 
 type Filter = 'all' | 'expense' | 'income';
@@ -17,6 +18,7 @@ export default function RiwayatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { transactions, refresh, deleteTransaction } = useData();
+  const { money } = useMoney();
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -57,7 +59,7 @@ export default function RiwayatScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Hapus transaksi?',
-      `${tx.merchant ?? tx.category?.name ?? 'Transaksi'} · ${rupiah(Number(tx.amount))}`,
+      `${tx.merchant ?? tx.category?.name ?? 'Transaksi'} · ${money(Number(tx.amount))}`,
       [
         { text: 'Batal', style: 'cancel' },
         {
@@ -139,7 +141,7 @@ export default function RiwayatScreen() {
             </Txt>
             {section.total > 0 ? (
               <Txt variant="caption" color={colors.textFaint}>
-                {rupiah(section.total)}
+                {money(section.total)}
               </Txt>
             ) : null}
           </View>

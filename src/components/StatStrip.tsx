@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { Card, Txt } from '@/components/ui';
 import { colors, space } from '@/lib/theme';
 import { percentChange } from '@/analytics/projection';
-import { rupiahCompact } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 
 export function StatStrip({
   income,
@@ -14,22 +14,23 @@ export function StatStrip({
   expense: number;
   previousExpense: number;
 }) {
+  const { compact } = useMoney();
   const net = income - expense;
   const change = percentChange(expense, previousExpense);
 
   return (
     <View style={{ flexDirection: 'row', gap: space.sm }}>
-      <Stat label="Masuk" value={rupiahCompact(income)} tone={colors.income} />
+      <Stat label="Masuk" value={compact(income)} tone={colors.income} />
       <Stat
         label="Keluar"
-        value={rupiahCompact(expense)}
+        value={compact(expense)}
         tone={colors.expense}
         hint={change === null ? undefined : `${formatChange(change)} vs bulan lalu`}
         hintTone={change !== null && change > 0 ? colors.warning : colors.textFaint}
       />
       <Stat
         label="Sisa"
-        value={rupiahCompact(net)}
+        value={compact(net)}
         tone={net >= 0 ? colors.text : colors.expense}
       />
     </View>

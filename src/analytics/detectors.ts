@@ -10,6 +10,18 @@
 import { daysBetween, dayKey, rupiah, rupiahCompact, startOfDay } from '@/lib/format';
 import { median, stdev, sum } from './projection';
 
+/**
+ * Pemformat nominal disuntikkan dari luar, bukan dipanggil langsung, supaya
+ * teks temuan mengikuti mata uang pilihan user. Nilai bawaannya Rupiah agar
+ * pemanggil lama (dan unit test) tetap jalan tanpa perubahan.
+ */
+export interface MoneyFormat {
+  money: (amount: number) => string;
+  compact: (amount: number) => string;
+}
+
+const RUPIAH: MoneyFormat = { money: rupiah, compact: rupiahCompact };
+
 export interface TxPoint {
   id: string;
   amount: number;
@@ -101,7 +113,10 @@ export function detectRecurring(txs: readonly TxPoint[], now: Date = new Date())
   return out.sort((a, b) => b.typicalAmount - a.typicalAmount);
 }
 
-export function recurringFindings(list: readonly Recurring[]): Finding[] {
+export function recurringFindings(
+  list: readonly Recurring[],
+  fmt: MoneyFormat = RUPIAH,
+): Finding[] {
   if (list.length === 0) return [];
 
   const monthlyTotal = sum(list.map((r) => r.typicalAmount));
@@ -111,7 +126,7 @@ export function recurringFindings(list: readonly Recurring[]): Finding[] {
       severity: 'info',
       title: `${list.length} langganan rutin terdeteksi`,
       detail:
-        `Total ${rupiah(monthlyTotal)} per bulan keluar otomatis: ` +
+        `Total ${fmt.money(monthlyTotal)} per bulan keluar otomatis: ` +
         list.map((r) => `${r.merchant} (tgl ${r.dayOfMonth})`).join(', ') + '.',
       data: {
         jumlah: list.length,
@@ -131,7 +146,11 @@ export function recurringFindings(list: readonly Recurring[]): Finding[] {
  * dari 30 hari terakhir. Ambang absolut Rp 50.000 mencegah notifikasi
  * berisik pada orang yang pengeluaran hariannya kecil.
  */
-export function detectSpike(txs: readonly TxPoint[], now: Date = new Date()): Finding[] {
+export function detectSpike(
+  txs: readonly TxPoint[],
+  now: Date = new Date(),
+  fmt: MoneyFormat = RUPIAH,
+): Finding[] {
   const expenses = txs.filter((t) => t.kind === 'expense');
   if (expenses.length < 10) return [];
 
@@ -161,7 +180,7 @@ export function detectSpike(txs: readonly TxPoint[], now: Date = new Date()): Fi
       kind: 'spike',
       severity: 'warning',
       title: `Hari ini ${times.toFixed(1)}x lebih boros dari biasanya`,
-      detail: `Keluar ${rupiah(todayTotal)} hari ini, sementara rata-rata harianmu ${rupiahCompact(mean)}.`,
+      detail: `Keluar ${fmt.money(todayTotal)} hari ini, sementara rata-rata harianmu ${fmt.compact(mean)}.`,
       data: {
         hari_ini: Math.round(todayTotal),
         rata_rata_harian: Math.round(mean),
@@ -180,7 +199,11 @@ export function detectSpike(txs: readonly TxPoint[], now: Date = new Date()): Fi
  * per kategori. Butuh kenaikan >= 40% DAN selisih nyata >= Rp 50.000 supaya
  * kategori bernilai kecil tidak memicu peringatan hanya karena persentase.
  */
-export function detectCategorySurge(txs: readonly TxPoint[], now: Date = new Date()): Finding[] {
+export function detectCategorySurge(
+  txs: readonly TxPoint[],
+  now: Date = new Date(),
+  fmt: MoneyFormat = RUPIAH,
+): Finding[] {
   const weekMs = 7 * 86_400_000;
   const thisWeekStart = new Date(now.getTime() - weekMs);
   const baselineStart = new Date(now.getTime() - 4 * weekMs);
@@ -213,7 +236,7 @@ export function detectCategorySurge(txs: readonly TxPoint[], now: Date = new Dat
       kind: 'category_surge',
       severity: pct >= 100 ? 'danger' : 'warning',
       title: `${category} naik ${Math.round(pct)}% minggu ini`,
-      detail: `Minggu ini ${rupiah(now7)}, biasanya sekitar ${rupiahCompact(priorWeekly)} per minggu.`,
+      detail: `Minggu ini ${fmt.money(now7)}, biasanya sekitar ${fmt.compact(priorWeekly)} per minggu.`,
       data: {
         kategori: category,
         minggu_ini: Math.round(now7),
@@ -260,7 +283,10 @@ export function evaluateBudgets(
   });
 }
 
-export function budgetFindings(statuses: readonly BudgetStatus[]): Finding[] {
+export function budgetFindings(
+  statuses: readonly BudgetStatus[],
+  fmt: MoneyFormat = RUPIAH,
+): Finding[] {
   const out: Finding[] = [];
 
   for (const s of statuses) {
@@ -271,7 +297,7 @@ export function budgetFindings(statuses: readonly BudgetStatus[]): Finding[] {
         kind: 'budget_over',
         severity: 'danger',
         title: `Budget ${s.categoryName} sudah jebol`,
-        detail: `Terpakai ${rupiah(s.spent)} dari budget ${rupiah(s.budget)}.`,
+        detail: `Terpakai ${fmt.money(s.spent)} dari budget ${fmt.money(s.budget)}.`,
         data: {
           kategori: s.categoryName,
           budget: Math.round(s.budget),
@@ -285,8 +311,8 @@ export function budgetFindings(statuses: readonly BudgetStatus[]): Finding[] {
         severity: 'warning',
         title: `${s.categoryName} diperkirakan lewat budget`,
         detail:
-          `Baru ${rupiah(s.spent)} dari ${rupiah(s.budget)}, tapi dengan laju sekarang ` +
-          `akhir bulan bisa menyentuh ${rupiahCompact(s.projected)}.`,
+          `Baru ${fmt.money(s.spent)} dari ${fmt.money(s.budget)}, tapi dengan laju sekarang ` +
+          `akhir bulan bisa menyentuh ${fmt.compact(s.projected)}.`,
         data: {
           kategori: s.categoryName,
           budget: Math.round(s.budget),
@@ -313,12 +339,13 @@ export function runDetectors(
   budgets: readonly { category_name: string; amount: number }[],
   spentByCategory: ReadonlyMap<string, number>,
   now: Date = new Date(),
+  fmt: MoneyFormat = RUPIAH,
 ): Finding[] {
   const findings = [
-    ...budgetFindings(evaluateBudgets(budgets, spentByCategory, now)),
-    ...detectSpike(txs, now),
-    ...detectCategorySurge(txs, now),
-    ...recurringFindings(detectRecurring(txs, now)),
+    ...budgetFindings(evaluateBudgets(budgets, spentByCategory, now), fmt),
+    ...detectSpike(txs, now, fmt),
+    ...detectCategorySurge(txs, now, fmt),
+    ...recurringFindings(detectRecurring(txs, now), fmt),
   ];
 
   const rank = { danger: 0, warning: 1, good: 2, info: 3 } as const;

@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { useData } from '@/store/data';
 import { useSession } from '@/store/session';
+import { useMoney } from '@/hooks/useMoney';
 import {
   computeBalance,
   dailySeries,
@@ -39,6 +40,7 @@ export interface DashboardData {
 export function useDashboard(now: Date = new Date()): DashboardData {
   const { accounts, transactions, budgets, loading } = useData();
   const { profile } = useSession();
+  const { money, compact } = useMoney();
 
   // `now` sengaja tidak masuk daftar dependensi: objek Date baru dibuat setiap
   // render, dan memasukkannya akan menghitung ulang terus-menerus. Cukup
@@ -114,6 +116,7 @@ export function useDashboard(now: Date = new Date()): DashboardData {
       budgets.map((b) => ({ category_name: b.category_name, amount: Number(b.amount) })),
       spentByCategory,
       now,
+      { money, compact },
     );
 
     return {
@@ -132,5 +135,5 @@ export function useDashboard(now: Date = new Date()): DashboardData {
       loading,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, transactions, budgets, profile?.payday_day, loading]);
+  }, [accounts, transactions, budgets, profile?.payday_day, loading, money, compact]);
 }

@@ -56,7 +56,9 @@ export function rupiahCompact(n: number): string {
 function trimDecimal(v: number): string {
   const digits = v < 10 ? 2 : v < 100 ? 1 : 0;
   const fixed = v.toFixed(digits);
-  return fixed.replace(/\.?0+$/, '').replace('.', ',');
+  // Tanpa penjagaan ini, "250" ikut terpangkas menjadi "25".
+  if (!fixed.includes('.')) return fixed;
+  return fixed.replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
 }
 
 /** Nominal bertanda untuk baris transaksi: "+Rp 5.000.000" / "−Rp 35.000". */

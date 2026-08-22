@@ -7,7 +7,7 @@ import { View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { colors, radius, space } from '@/lib/theme';
 import { Txt } from '@/components/ui';
-import { rupiahCompact } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 
 export interface Slice {
   label: string;
@@ -22,6 +22,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const MAX_SLICES = 5;
 
 export function MiniDonut({ slices }: { slices: readonly Slice[] }) {
+  const { compact } = useMoney();
   const merged = mergeTail(slices);
   const total = merged.reduce((acc, s) => acc + s.value, 0);
 
@@ -84,7 +85,7 @@ export function MiniDonut({ slices }: { slices: readonly Slice[] }) {
               {Math.round((s.value / total) * 100)}%
             </Txt>
             <Txt variant="caption" color={colors.textFaint} style={{ width: 62, textAlign: 'right' }}>
-              {rupiahCompact(s.value)}
+              {compact(s.value)}
             </Txt>
           </View>
         ))}

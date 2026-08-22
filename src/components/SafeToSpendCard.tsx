@@ -9,7 +9,8 @@ import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space } from '@/lib/theme';
-import { nextPayday, rupiah, shortDate } from '@/lib/format';
+import { nextPayday, shortDate } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 import type { SafeToSpend } from '@/analytics/projection';
 
 export function SafeToSpendCard({
@@ -19,6 +20,7 @@ export function SafeToSpendCard({
   data: SafeToSpend;
   spentToday: number;
 }) {
+  const { money } = useMoney();
   const payday = nextPayday(data.paydayDay);
   const usedRatio = data.perDay > 0 ? Math.min(1, spentToday / data.perDay) : 0;
   const overToday = spentToday > data.perDay && data.perDay > 0;
@@ -34,7 +36,7 @@ export function SafeToSpendCard({
       </View>
 
       <Txt variant="display" color={tone} style={{ marginTop: space.xs }}>
-        {data.overdrawn ? rupiah(data.available) : rupiah(Math.floor(data.perDay))}
+        {data.overdrawn ? money(data.available) : money(Math.floor(data.perDay))}
       </Txt>
 
       <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2 }}>
@@ -59,7 +61,7 @@ export function SafeToSpendCard({
 
           <View style={styles.footer}>
             <Txt variant="caption" color={colors.textMuted}>
-              Terpakai hari ini {rupiah(spentToday)}
+              Terpakai hari ini {money(spentToday)}
             </Txt>
             {overToday ? (
               <View style={[styles.pill, { backgroundColor: withAlpha(colors.warning, 0.14) }]}>
@@ -70,7 +72,7 @@ export function SafeToSpendCard({
               </View>
             ) : (
               <Txt variant="caption" color={colors.textFaint}>
-                sisa {rupiah(Math.max(0, Math.floor(data.perDay - spentToday)))}
+                sisa {money(Math.max(0, Math.floor(data.perDay - spentToday)))}
               </Txt>
             )}
           </View>

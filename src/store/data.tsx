@@ -11,6 +11,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -50,6 +51,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Kegagalan jaringan sesaat — pindah Wi-Fi, sinyal putus — dulu meninggalkan
+   * kartu merah yang tidak pernah hilang sendiri. Satu kali percobaan ulang
+   * otomatis menutup hampir semua kasus itu tanpa user perlu menyentuh apa pun.
+   */
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retriedRef = useRef(false);
+
   const refresh = useCallback(async () => {
     if (!userId) return;
     setError(null);
@@ -86,12 +95,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
           category_name: b.category?.name ?? '',
         })),
       );
+      retriedRef.current = false;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal memuat data.');
+
+      if (!retriedRef.current) {
+        retriedRef.current = true;
+        if (retryTimer.current) clearTimeout(retryTimer.current);
+        retryTimer.current = setTimeout(() => void refreshRef.current?.(), 2500);
+      }
     } finally {
       setLoading(false);
     }
   }, [userId]);
+
+  // `refresh` memanggil dirinya sendiri lewat ref supaya tidak perlu masuk
+  // ke daftar dependensinya sendiri.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  useEffect(() => () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+  }, []);
 
   useEffect(() => {
     if (!userId) {

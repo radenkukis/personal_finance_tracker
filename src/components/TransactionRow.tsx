@@ -3,7 +3,8 @@ import { Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { IconBadge, Txt } from '@/components/ui';
 import { colors, size, space } from '@/lib/theme';
-import { clockTime, signedRupiah } from '@/lib/format';
+import { clockTime } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 import type { TransactionWithRefs } from '@/types/db';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -32,9 +33,22 @@ export function TransactionRow({
   tx: TransactionWithRefs;
   onPress?: () => void;
 }) {
+  const { signed } = useMoney();
   const color = tx.category?.color ?? colors.textFaint;
   const icon = ICONS[tx.category?.icon ?? 'tag'] ?? 'tag';
-  const title = tx.merchant?.trim() || tx.category?.name || 'Tanpa kategori';
+  /*
+   * Urutan judul penting. AI menaruh barang spesifik di `note` dan
+   * mengosongkan `merchant` bila yang disebut memang bukan nama toko
+   * ("boba A" itu barang, bukan tempat). Tanpa note ikut dipertimbangkan,
+   * baris ini cuma menampilkan nama kategori dan detailnya hilang.
+   */
+  const note = tx.note?.trim();
+  const merchant = tx.merchant?.trim();
+  const title = merchant || note || tx.category?.name || 'Tanpa kategori';
+
+  // Note hanya diulang di baris bawah bila belum dipakai sebagai judul.
+  const subtitle = [note && merchant ? note : null, tx.category?.name, tx.account?.name,
+    clockTime(new Date(tx.occurred_at))].filter(Boolean).join(' · ');
 
   // Hasil AI dengan keyakinan rendah ditandai supaya user tahu perlu dicek.
   const uncertain = tx.ai_confidence !== null && tx.ai_confidence < 0.6;
@@ -66,14 +80,12 @@ export function TransactionRow({
           ) : null}
         </View>
         <Txt variant="caption" color={colors.textFaint} numberOfLines={1}>
-          {[tx.category?.name, tx.account?.name, clockTime(new Date(tx.occurred_at))]
-            .filter(Boolean)
-            .join(' · ')}
+          {subtitle}
         </Txt>
       </View>
 
       <Txt variant="amount" color={tx.kind === 'income' ? colors.income : colors.text}>
-        {signedRupiah(tx.amount, tx.kind)}
+        {signed(Number(tx.amount), tx.kind)}
       </Txt>
     </Pressable>
   );

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Divider, EmptyState, SectionLabel, Txt } from '@/components/ui';
+import { Button, Card, Divider, EmptyState, IconBadge, SectionLabel, Txt, withAlpha } from '@/components/ui';
 import { SafeToSpendCard } from '@/components/SafeToSpendCard';
 import { StatStrip } from '@/components/StatStrip';
 import { InsightCard } from '@/components/InsightCard';
@@ -55,17 +55,37 @@ export default function BerandaScreen() {
       </View>
 
       {error ? (
-        <Card style={{ borderColor: colors.expense }}>
-          <Txt variant="bodyStrong" color={colors.expense}>
-            Gagal memuat data
-          </Txt>
-          <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 4 }}>
+        /*
+         * Gagal memuat BUKAN berarti datanya kosong. Sebelum ini keduanya
+         * tampil bersamaan, sehingga user melihat "belum ada transaksi"
+         * padahal datanya ada — cuma gagal diambil.
+         */
+        <Card style={{ borderColor: withAlpha(colors.expense, 0.5) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+            <IconBadge name="wifi-off" color={colors.expense} diameter={32} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="bodyStrong" color={colors.expense}>
+                Data belum berhasil dimuat
+              </Txt>
+              <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2, lineHeight: 17 }}>
+                Transaksimu tetap aman tersimpan. Biasanya karena koneksi
+                terputus sebentar.
+              </Txt>
+            </View>
+          </View>
+          <Button
+            title="Coba lagi"
+            variant="secondary"
+            icon="refresh-cw"
+            onPress={onRefresh}
+            loading={refreshing}
+            style={{ marginTop: space.md }}
+          />
+          <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm }}>
             {error}
           </Txt>
         </Card>
-      ) : null}
-
-      {d.isEmpty && !d.loading ? (
+      ) : d.isEmpty && !d.loading ? (
         <Card>
           <EmptyState
             icon="edit-3"

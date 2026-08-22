@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha } from '@/components/ui';
 import { colors, size, space } from '@/lib/theme';
-import { rupiah } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
+import { CurrencyPicker } from '@/components/CurrencyPicker';
 import { supabase } from '@/lib/supabase';
 import { aiMode, summarizeFindings } from '@/lib/ai';
 import { useSession } from '@/store/session';
@@ -16,6 +17,7 @@ export default function AturScreen() {
   const { profile, signOut, refreshProfile, session } = useSession();
   const { accounts, categories, transactions } = useData();
   const dashboard = useDashboard();
+  const { money, currency } = useMoney();
 
   const [payday, setPayday] = useState(String(profile?.payday_day ?? 25));
   const [saving, setSaving] = useState(false);
@@ -23,6 +25,7 @@ export default function AturScreen() {
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const remote = aiMode() === 'remote';
 
@@ -49,6 +52,25 @@ export default function AturScreen() {
       setSaving(false);
     }
   }, [payday, refreshProfile, session]);
+
+  const saveCurrency = useCallback(
+    async (code: string) => {
+      setPickerOpen(false);
+      setError(null);
+      try {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ currency: code })
+          .eq('id', session?.user.id ?? '');
+        if (updateError) throw new Error(updateError.message);
+        // Profil dimuat ulang supaya seluruh layar langsung memakai format baru.
+        await refreshProfile();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Gagal mengganti mata uang.');
+      }
+    },
+    [refreshProfile, session],
+  );
 
   const makeSummary = useCallback(async () => {
     setSummaryBusy(true);
@@ -140,6 +162,52 @@ export default function AturScreen() {
         </View>
       ) : null}
 
+      {/* --- Mata uang ---------------------------------------------------- */}
+      <View>
+        <SectionLabel>Mata uang</SectionLabel>
+        <Pressable
+          onPress={() => setPickerOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Ganti mata uang"
+          style={({ pressed }) => [
+            {
+              backgroundColor: pressed ? colors.surfacePressed : colors.surface,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              padding: space.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.md,
+            },
+          ]}
+        >
+          <View
+            style={{
+              width: 52,
+              paddingVertical: 5,
+              borderRadius: 8,
+              backgroundColor: withAlpha(colors.accent, 0.16),
+              alignItems: 'center',
+            }}
+          >
+            <Txt variant="caption" color={colors.accent}>
+              {currency.code}
+            </Txt>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Txt variant="bodyStrong">{currency.name}</Txt>
+            <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
+              Contoh tampilan: {money(1250000)}
+            </Txt>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.textFaint} />
+        </Pressable>
+        <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm, lineHeight: 17 }}>
+          Hanya mengubah tampilan. Nilai transaksi yang sudah tercatat tidak dikonversi.
+        </Txt>
+      </View>
+
       {/* --- Gajian ------------------------------------------------------- */}
       <View>
         <SectionLabel>Tanggal gajian</SectionLabel>
@@ -198,7 +266,7 @@ export default function AturScreen() {
           <Row label="Email" value={session?.user.email ?? '—'} />
           <Row label="Transaksi tercatat" value={String(transactions.length)} />
           <Row label="Kategori" value={String(categories.length)} />
-          <Row label="Saldo terhitung" value={rupiah(dashboard.balance)} last />
+          <Row label="Saldo terhitung" value={money(dashboard.balance)} last />
         </Card>
       </View>
 
@@ -211,6 +279,13 @@ export default function AturScreen() {
       ) : null}
 
       <Button title="Keluar" variant="danger" icon="log-out" onPress={() => void signOut()} full />
+
+      <CurrencyPicker
+        visible={pickerOpen}
+        current={currency}
+        onPick={saveCurrency}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
         <Feather name="shield" size={11} color={colors.textFaint} />

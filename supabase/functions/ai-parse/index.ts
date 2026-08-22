@@ -22,7 +22,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     return fail(`Teks terlalu panjang (maksimal ${MAX_INPUT_CHARS} karakter).`);
   }
 
-  const [categories, accounts, corrections] = await Promise.all([
+  const [categories, accounts, corrections, merchants] = await Promise.all([
     ctx.db.from('categories').select('name, kind').order('sort_order'),
     ctx.db.from('accounts').select('name').eq('is_archived', false),
     // Koreksi terbaru dipakai sebagai contoh few-shot supaya tebakan
@@ -32,12 +32,32 @@ Deno.serve(serveAuthed(async (req, ctx) => {
       .select('raw_input, correct_category')
       .order('created_at', { ascending: false })
       .limit(15),
+    // Nama tempat yang sudah dipakai, sebagai acuan ejaan bagi model.
+    ctx.db
+      .from('transactions')
+      .select('merchant')
+      .not('merchant', 'is', null)
+      .order('occurred_at', { ascending: false })
+      .limit(200),
   ]);
+
+  // Dedup dengan mempertahankan ejaan yang paling baru dipakai.
+  const seen = new Set<string>();
+  const knownMerchants: string[] = [];
+  for (const row of (merchants.data ?? []) as { merchant: string | null }[]) {
+    const name = row.merchant?.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    knownMerchants.push(name);
+  }
 
   const promptContext: PromptContext = {
     categories: categories.data ?? [],
     accounts: (accounts.data ?? []).map((a: { name: string }) => a.name),
     corrections: corrections.data ?? [],
+    knownMerchants,
     nowISO: new Date().toISOString(),
     timezone: body?.timezone ?? 'Asia/Jakarta',
   };

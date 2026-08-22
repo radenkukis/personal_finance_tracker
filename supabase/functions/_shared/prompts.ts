@@ -80,15 +80,25 @@ export interface PromptContext {
   accounts: string[];
   /** Koreksi kategori yang pernah dilakukan user — contoh untuk model. */
   corrections: { raw_input: string; correct_category: string }[];
+  /**
+   * Nama tempat yang sudah pernah dipakai user. Dikirim sebagai acuan ejaan
+   * supaya "bobs A" menempel ke "Boba A" yang sudah ada, bukan melahirkan
+   * baris baru yang sebenarnya toko yang sama.
+   */
+  knownMerchants: string[];
   /** Waktu sekarang di zona waktu user, sebagai acuan "kemarin", "tadi pagi". */
   nowISO: string;
   timezone: string;
 }
 
 /**
- * Bagian prompt yang stabil ditaruh lebih dulu supaya bisa di-cache; bagian
- * yang berubah tiap permintaan (waktu sekarang, kalimat user) ditaruh
- * belakangan. Urutan ini yang menentukan cache kena atau tidak.
+ * Bagian yang berubah tiap permintaan (waktu sekarang, kalimat user) sengaja
+ * TIDAK ditaruh di sini — itu masuk ke pesan user, setelah titik cache.
+ *
+ * Daftar kategori, nama tempat, dan koreksi memang ikut di bagian yang
+ * di-cache. Ketiganya berubah jarang — hanya saat user memakai tempat yang
+ * benar-benar baru atau mengoreksi kategori — sehingga cache tetap sering
+ * kena. Ketika berubah, cache tersusun ulang sekali lalu stabil lagi.
  */
 export function buildParseSystemPrompt(ctx: PromptContext): string {
   const expenseCats = ctx.categories.filter((c) => c.kind === 'expense').map((c) => c.name);
@@ -114,6 +124,24 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     `- Kategori pemasukan yang tersedia: ${incomeCats.join(', ')}.`,
     '- category_name HARUS persis salah satu dari daftar di atas. Jangan mengarang kategori baru.',
     '- Bila benar-benar tidak cocok ke mana pun, pakai "Lainnya".',
+    '- JANGAN memecah kategori karena variasi barang. "boba A", "boba B", dan "boba C"',
+    '  ketiganya tetap masuk kategori minuman/makanan yang sama; yang membedakan',
+    '  cukup ditulis di field note. Kategori dipakai untuk melihat pola pengeluaran,',
+    '  dan itu rusak kalau tiap varian barang jadi kategori sendiri.',
+    '',
+    'ATURAN CATATAN (note):',
+    '- Isi note dengan barang atau keperluan spesifiknya: "Boba A", "kado nikahan",',
+    '  "token listrik 100rb". Ini yang membuat riwayat tetap bisa dicari nanti.',
+    '- Tulis ringkas, bukan menyalin seluruh kalimat user.',
+    '- Kosongkan (null) bila memang tidak ada detail yang menambah informasi.',
+    '',
+    'ATURAN EJAAN — PENTING:',
+    '- Perbaiki salah ketik yang jelas. "bobs A" maksudnya "Boba A"; "indomart"',
+    '  maksudnya "Indomaret"; "gojeg" maksudnya "Gojek".',
+    '- Bila ada nama tempat yang MIRIP di daftar "nama yang sudah dipakai" di bawah,',
+    '  PAKAI ejaan dari daftar itu persis, jangan bikin varian baru. Satu tempat yang',
+    '  tertulis dua macam akan terhitung sebagai dua tempat berbeda.',
+    '- Rapikan huruf besar-kecil: "warteg bu ani" ditulis "Warteg Bu Ani".',
     '',
     'ATURAN DOMPET:',
     `- Dompet yang tersedia: ${ctx.accounts.join(', ')}.`,
@@ -127,6 +155,14 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     '  catat satu transaksi saja sebesar totalnya.',
     '- merchant hanya diisi bila nama tempatnya benar-benar disebut. Jangan menyalin seluruh kalimat.',
   ];
+
+  if (ctx.knownMerchants.length > 0) {
+    lines.push(
+      '',
+      'NAMA TEMPAT YANG SUDAH DIPAKAI USER INI — samakan ejaannya bila mirip:',
+      ctx.knownMerchants.slice(0, 40).join(', ') + '.',
+    );
+  }
 
   if (ctx.corrections.length > 0) {
     lines.push(

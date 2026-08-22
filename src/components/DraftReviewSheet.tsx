@@ -10,7 +10,8 @@ import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
-import { groupDigits, relativeDay } from '@/lib/format';
+import { relativeDay } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 import type { Account, Category, DraftTransaction } from '@/types/db';
 
 const LOW_CONFIDENCE = 0.6;
@@ -57,6 +58,7 @@ function DraftCard({
   onChange: (patch: Partial<DraftTransaction>) => void;
   onRemove: () => void;
 }) {
+  const { currency } = useMoney();
   const uncertain = draft.confidence < LOW_CONFIDENCE;
   const pool = useMemo(
     () => categories.filter((c) => c.kind === draft.kind),
@@ -95,10 +97,10 @@ function DraftCard({
           </Txt>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Txt variant="displaySm" color={colors.textMuted}>
-              Rp
+              {currency.symbol}
             </Txt>
             <TextInput
-              value={groupDigits(draft.amount)}
+              value={groupWith(draft.amount, currency.group)}
               onChangeText={(v) => onChange({ amount: parseDigits(v) })}
               keyboardType="number-pad"
               style={[type.displaySm, { color: colors.text, flex: 1, padding: 0 }]}
@@ -219,7 +221,12 @@ function Chip({
   );
 }
 
-/** "1.250.000" -> 1250000. Input nominal selalu bilangan bulat rupiah. */
+/** Pemisah ribuan mengikuti mata uang aktif, bukan selalu gaya Indonesia. */
+function groupWith(amount: number, sep: string): string {
+  return String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, sep);
+}
+
+/** "1.250.000" -> 1250000. Input nominal selalu bilangan bulat. */
 function parseDigits(value: string): number {
   const digits = value.replace(/\D/g, '');
   return digits ? Number(digits) : 0;

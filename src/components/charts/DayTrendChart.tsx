@@ -11,7 +11,7 @@ import { View } from 'react-native';
 import Svg, { G, Line, Rect } from 'react-native-svg';
 import { colors, radius, space } from '@/lib/theme';
 import { Txt } from '@/components/ui';
-import { rupiahCompact } from '@/lib/format';
+import { useMoney } from '@/hooks/useMoney';
 import type { DaySpend, MonthProjection } from '@/analytics/projection';
 import { dayKey } from '@/lib/format';
 
@@ -27,6 +27,7 @@ export function DayTrendChart({
   projection: MonthProjection;
   today?: Date;
 }) {
+  const { compact } = useMoney();
   const [width, setWidth] = useState(0);
 
   const todayKey = dayKey(today);
@@ -54,11 +55,11 @@ export function DayTrendChart({
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: space.sm }}>
         <Txt variant="caption" color={colors.textMuted}>
-          Rata-rata {rupiahCompact(projection.dailyAverage)}/hari
+          Rata-rata {compact(projection.dailyAverage)}/hari
         </Txt>
         {projection.daysRemaining > 0 ? (
           <Txt variant="caption" color={colors.textFaint}>
-            Proyeksi {rupiahCompact(projection.projectedTotal)}
+            Proyeksi {compact(projection.projectedTotal)}
           </Txt>
         ) : null}
       </View>
