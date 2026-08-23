@@ -5,7 +5,7 @@
  * dan tetap jalan walaupun tidak ada API key sama sekali. AI hanya dipakai
  * belakangan untuk menarasikan angka-angka ini menjadi kalimat.
  */
-import { dayKey, daysBetween, daysToPayday, startOfDay } from '@/lib/format';
+import { dayKey, daysBetween, startOfDay } from '@/lib/format';
 
 export interface DaySpend {
   /** "YYYY-MM-DD" waktu lokal. */
@@ -131,36 +131,37 @@ function weekdayWeights(elapsed: readonly DaySpend[]): number[] | null {
 }
 
 export interface SafeToSpend {
-  /** Nominal yang aman dipakai per hari sampai gajian berikutnya. */
+  /** Nominal yang aman dipakai per hari sampai akhir bulan. */
   perDay: number;
   /** Sisa uang yang boleh dipakai (saldo dikurangi yang sudah dialokasikan). */
   available: number;
+  /** Sisa hari bulan ini, termasuk hari ini. */
   daysLeft: number;
-  paydayDay: number;
   /** true bila saldo sudah minus — UI menampilkannya sebagai peringatan. */
   overdrawn: boolean;
 }
 
 /**
- * "Kamu masih bisa pakai Rp X per hari sampai gajian."
+ * "Kamu masih bisa pakai Rp X per hari sampai akhir bulan."
  *
  * Angka paling berguna di dashboard karena langsung bisa ditindaklanjuti,
  * berbeda dengan "total pengeluaran bulan ini" yang cuma informatif.
+ *
+ * Dasarnya akhir bulan, bukan tanggal gajian, supaya tidak ada satu pun
+ * setelan yang harus diisi user sebelum angkanya berarti.
  */
 export function safeToSpend(
   balance: number,
-  paydayDay: number,
   reserved = 0,
   now: Date = new Date(),
 ): SafeToSpend {
   const available = balance - reserved;
-  // +1 supaya hari ini ikut dihitung sebagai hari yang masih perlu dibiayai.
-  const daysLeft = Math.max(1, daysToPayday(paydayDay, now) + 1);
+  // Hari ini ikut dihitung sebagai hari yang masih perlu dibiayai.
+  const daysLeft = daysInMonth(now) - now.getDate() + 1;
   return {
     perDay: available > 0 ? available / daysLeft : 0,
     available,
     daysLeft,
-    paydayDay,
     overdrawn: available < 0,
   };
 }

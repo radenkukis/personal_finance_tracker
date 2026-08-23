@@ -120,6 +120,11 @@ export default function KategoriScreen() {
             await updateCategory(editing.id, patch);
             setEditing(null);
           }}
+          onDelete={() => {
+            const target = editing;
+            setEditing(null);
+            confirmDelete(target);
+          }}
         />
       ) : null}
 
@@ -217,7 +222,7 @@ function CategoryGroup({
       </Card>
 
       <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm }}>
-        Ketuk untuk menyunting · tekan lama untuk menghapus
+        Ketuk untuk menyunting — tombol hapus ada di dalamnya
       </Txt>
     </View>
   );
@@ -229,10 +234,13 @@ function CategoryEditor({
   initial,
   onSave,
   onClose,
+  onDelete,
 }: {
   initial: Pick<Category, 'name' | 'kind' | 'color' | 'keywords'>;
   onSave: (patch: Partial<Category>) => Promise<void>;
   onClose: () => void;
+  /** Tidak ada saat membuat kategori baru — belum ada yang bisa dihapus. */
+  onDelete?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(initial.name);
@@ -339,6 +347,22 @@ function CategoryEditor({
             <Txt variant="caption" color={colors.expense} style={{ marginTop: space.sm }}>
               {error}
             </Txt>
+          ) : null}
+
+          {onDelete ? (
+            <>
+              <View style={{ marginTop: space.lg }}>
+                <Divider />
+              </View>
+              <Button
+                title="Hapus kategori ini"
+                variant="danger"
+                icon="trash-2"
+                full
+                style={{ marginTop: space.lg }}
+                onPress={onDelete}
+              />
+            </>
           ) : null}
 
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>

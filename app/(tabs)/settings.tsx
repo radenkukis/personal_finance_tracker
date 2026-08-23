@@ -21,9 +21,9 @@ export default function AturScreen() {
   const { money, currency } = useMoney();
   const router = useRouter();
 
-  const [payday, setPayday] = useState(String(profile?.payday_day ?? 25));
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [nickname, setNickname] = useState(profile?.display_name ?? '');
+  const [savingName, setSavingName] = useState(false);
+  const [savedName, setSavedName] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,29 +31,29 @@ export default function AturScreen() {
 
   const remote = aiMode() === 'remote';
 
-  const savePayday = useCallback(async () => {
-    const day = Number(payday);
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      setError('Tanggal gajian harus antara 1 dan 31.');
+  const saveNickname = useCallback(async () => {
+    const name = nickname.trim();
+    if (!name) {
+      setError('Nama panggilan tidak boleh kosong.');
       return;
     }
-    setSaving(true);
+    setSavingName(true);
     setError(null);
     try {
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ payday_day: day })
+        .update({ display_name: name })
         .eq('id', session?.user.id ?? '');
       if (updateError) throw new Error(updateError.message);
       await refreshProfile();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setSavedName(true);
+      setTimeout(() => setSavedName(false), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
     } finally {
-      setSaving(false);
+      setSavingName(false);
     }
-  }, [payday, refreshProfile, session]);
+  }, [nickname, refreshProfile, session]);
 
   const saveCurrency = useCallback(
     async (code: string) => {
@@ -253,29 +253,30 @@ export default function AturScreen() {
         </Txt>
       </View>
 
-      {/* --- Gajian ------------------------------------------------------- */}
+      {/* --- Nama panggilan ------------------------------------------------ */}
       <View>
-        <SectionLabel>Tanggal gajian</SectionLabel>
+        <SectionLabel>Nama panggilan</SectionLabel>
         <Card>
           <Txt variant="caption" color={colors.textMuted} style={{ marginBottom: space.md }}>
-            Dipakai untuk menghitung jatah aman per hari di beranda.
+            Dipakai untuk menyapamu di beranda.
           </Txt>
           <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
               <Field
-                icon="calendar"
-                value={payday}
-                onChangeText={setPayday}
-                keyboardType="number-pad"
-                placeholder="25"
-                maxLength={2}
+                icon="user"
+                value={nickname}
+                onChangeText={setNickname}
+                placeholder="mis. Brandon"
+                maxLength={30}
+                autoCapitalize="words"
               />
             </View>
             <Button
-              title={saved ? 'Tersimpan' : 'Simpan'}
-              icon={saved ? 'check' : undefined}
-              onPress={savePayday}
-              loading={saving}
+              title={savedName ? 'Tersimpan' : 'Simpan'}
+              icon={savedName ? 'check' : undefined}
+              onPress={saveNickname}
+              loading={savingName}
+              disabled={!nickname.trim()}
             />
           </View>
         </Card>

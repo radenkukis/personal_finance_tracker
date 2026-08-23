@@ -9,7 +9,6 @@ import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space } from '@/lib/theme';
-import { nextPayday, shortDate } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
 import type { SafeToSpend } from '@/analytics/projection';
 
@@ -21,7 +20,6 @@ export function SafeToSpendCard({
   spentToday: number;
 }) {
   const { money } = useMoney();
-  const payday = nextPayday(data.paydayDay);
   const usedRatio = data.perDay > 0 ? Math.min(1, spentToday / data.perDay) : 0;
   const overToday = spentToday > data.perDay && data.perDay > 0;
 
@@ -42,7 +40,7 @@ export function SafeToSpendCard({
       <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2 }}>
         {data.overdrawn
           ? 'Pengeluaran sudah melewati pemasukan yang tercatat.'
-          : `per hari sampai gajian ${shortDate(payday)} · ${data.daysLeft} hari lagi`}
+          : `per hari sampai akhir bulan · ${data.daysLeft} hari lagi`}
       </Txt>
 
       {/* Bilah tipis: berapa banyak jatah hari ini yang sudah terpakai. */}

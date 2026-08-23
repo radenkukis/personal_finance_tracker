@@ -118,26 +118,6 @@ export function clockTime(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/**
- * Tanggal gajian berikutnya. Kalau tanggal gajian melebihi jumlah hari di
- * bulan tersebut (mis. 31 di bulan Februari), dipakai hari terakhir bulan itu.
- */
-export function nextPayday(paydayDay: number, now: Date = new Date()): Date {
-  const clampToMonth = (year: number, month: number) => {
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    return new Date(year, month, Math.min(paydayDay, lastDay));
-  };
-
-  const thisMonth = clampToMonth(now.getFullYear(), now.getMonth());
-  if (daysBetween(now, thisMonth) >= 0) return thisMonth;
-  return clampToMonth(now.getFullYear(), now.getMonth() + 1);
-}
-
-/** Berapa hari lagi sampai gajian (0 = hari ini gajian). */
-export function daysToPayday(paydayDay: number, now: Date = new Date()): number {
-  return daysBetween(now, nextPayday(paydayDay, now));
-}
-
 /** Kunci "YYYY-MM-DD" pada zona waktu lokal — untuk mengelompokkan per hari. */
 export function dayKey(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');

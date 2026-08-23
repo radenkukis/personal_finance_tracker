@@ -75,34 +75,42 @@ describe('projectMonth', () => {
 });
 
 describe('safeToSpend', () => {
-  it('membagi sisa saldo dengan hari tersisa sampai gajian', () => {
-    // 20 Agustus, gajian tanggal 25 -> 5 hari lagi, +1 karena hari ini ikut dihitung.
-    const s = safeToSpend(1_200_000, 25, 0, new Date(2026, 7, 20, 12));
+  it('membagi sisa saldo dengan sisa hari bulan ini', () => {
+    // 20 Agustus dari 31 hari -> 12 hari tersisa, termasuk hari ini.
+    const s = safeToSpend(1_200_000, 0, new Date(2026, 7, 20, 12));
 
-    expect(s.daysLeft).toBe(6);
-    expect(s.perDay).toBe(200_000);
+    expect(s.daysLeft).toBe(12);
+    expect(s.perDay).toBe(100_000);
     expect(s.overdrawn).toBe(false);
   });
 
-  it('mengurangi dana yang sudah dialokasikan untuk tagihan', () => {
-    const s = safeToSpend(1_200_000, 25, 600_000, new Date(2026, 7, 20, 12));
+  it('mengurangi dana yang sudah dialokasikan untuk budget', () => {
+    const s = safeToSpend(1_200_000, 600_000, new Date(2026, 7, 20, 12));
 
     expect(s.available).toBe(600_000);
-    expect(s.perDay).toBe(100_000);
+    expect(s.perDay).toBe(50_000);
   });
 
   it('menandai saldo minus dan tidak mengembalikan jatah negatif', () => {
-    const s = safeToSpend(-50_000, 25, 0, new Date(2026, 7, 20, 12));
+    const s = safeToSpend(-50_000, 0, new Date(2026, 7, 20, 12));
 
     expect(s.overdrawn).toBe(true);
     expect(s.perDay).toBe(0);
   });
 
-  it('melompat ke gajian bulan depan bila tanggalnya sudah lewat', () => {
-    // 26 Agustus, gajian tanggal 25 -> gajian berikutnya 25 September.
-    const s = safeToSpend(3_000_000, 25, 0, new Date(2026, 7, 26, 12));
+  it('di hari terakhir bulan, sisa harinya satu', () => {
+    const s = safeToSpend(300_000, 0, new Date(2026, 7, 31, 12));
 
-    expect(s.daysLeft).toBe(31); // 30 hari + hari ini
+    expect(s.daysLeft).toBe(1);
+    expect(s.perDay).toBe(300_000);
+  });
+
+  it('mengikuti panjang bulan yang berbeda', () => {
+    // Februari 2026 punya 28 hari.
+    const s = safeToSpend(280_000, 0, new Date(2026, 1, 1, 12));
+
+    expect(s.daysLeft).toBe(28);
+    expect(s.perDay).toBe(10_000);
   });
 });
 

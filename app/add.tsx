@@ -1,5 +1,14 @@
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +18,7 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
+  useAudioRecorderState,
 } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { Button, Card, Txt, withAlpha } from '@/components/ui';
@@ -19,6 +29,12 @@ import { useData } from '@/store/data';
 import type { DraftTransaction } from '@/types/db';
 
 const CONTOH = ['kopi 25rb', 'bensin 50k gopay', 'kemarin makan di padang 45rb', 'gajian 8jt'];
+
+/** "0:07" · "1:23" — durasi rekaman yang sedang berjalan. */
+function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 /** Draft kosong untuk jalur isi manual — tidak lewat parser sama sekali. */
 function draftKosong(): DraftTransaction {
@@ -51,6 +67,14 @@ export default function AddScreen() {
   const [usedAI, setUsedAI] = useState(false);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  /*
+   * `recorder.isRecording` TIDAK reaktif — membacanya langsung saat render
+   * membuat tampilan tidak pernah berubah ketika perekaman dimulai, sehingga
+   * user tidak tahu sedang merekam maupun cara menghentikannya. Status yang
+   * benar datang dari hook ini.
+   */
+  const recState = useAudioRecorderState(recorder, 250);
+  const isRecording = recState.isRecording;
   const voiceAvailable = aiMode() === 'remote';
 
   // -------------------------------------------------------------------
@@ -90,16 +114,28 @@ export default function AddScreen() {
   const toggleRecording = useCallback(async () => {
     setError(null);
 
-    if (recorder.isRecording) {
+    if (isRecording) {
       setBusy(true);
       setStatus('Menyalin suara…');
       try {
         await recorder.stop();
-        const uri = recorder.uri;
-        if (!uri) throw new Error('Rekaman tidak tersimpan.');
+
+        // `recorder.uri` kadang belum terisi tepat setelah stop; status
+        // perekam menyimpan lokasinya juga, jadi dipakai sebagai cadangan.
+        const uri = recorder.uri ?? recState.url;
+        if (!uri) throw new Error('Rekaman tidak tersimpan. Coba rekam ulang.');
+
+        if (recState.durationMillis > 0 && recState.durationMillis < 700) {
+          throw new Error('Rekamannya terlalu pendek. Tahan sebentar sambil bicara.');
+        }
 
         const base64 = await new File(uri).base64();
+        // Berkas dari HIGH_QUALITY berekstensi .m4a di iOS maupun Android.
         const spoken = await transcribeAudio(base64, 'audio/m4a');
+
+        if (!spoken.trim()) {
+          throw new Error('Suaranya tidak tertangkap. Coba bicara lebih dekat ke mikrofon.');
+        }
 
         setText(spoken);
         setStatus(null);
@@ -113,18 +149,30 @@ export default function AddScreen() {
       return;
     }
 
+    // Papan ketik harus menyingkir dulu: tanpa ini layar penuh keyboard
+    // sementara yang sedang berlangsung justru perekaman suara.
+    Keyboard.dismiss();
+
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
       setError('Izin mikrofon ditolak. Aktifkan lewat pengaturan HP untuk memakai input suara.');
       return;
     }
 
-    // Wajib di iOS: tanpa ini perekaman gagal diam-diam.
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [recorder, runParse]);
+    try {
+      // Wajib di iOS: tanpa ini perekaman gagal diam-diam.
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `Mikrofon tidak bisa dipakai: ${e.message}`
+          : 'Mikrofon tidak bisa dipakai.',
+      );
+    }
+  }, [recorder, recState, isRecording, runParse]);
 
   // -------------------------------------------------------------------
   // Simpan
@@ -208,6 +256,30 @@ export default function AddScreen() {
               }
             />
           </>
+        ) : isRecording ? (
+          /*
+           * Saat merekam, layar hanya menampilkan satu hal. Sebelumnya
+           * perekaman berjalan diam-diam di balik papan ketik dan user tidak
+           * tahu sedang merekam, apalagi cara berhentinya.
+           */
+          <Card style={{ borderColor: withAlpha(colors.expense, 0.5), alignItems: 'center', paddingVertical: space.xxl }}>
+            <View style={styles.recDot} />
+            <Txt variant="display" style={{ marginTop: space.lg }}>
+              {formatDuration(recState.durationMillis)}
+            </Txt>
+            <Txt variant="caption" color={colors.textMuted} style={{ marginTop: space.xs }}>
+              Sedang merekam — sebutkan transaksinya
+            </Txt>
+            <Button
+              title="Berhenti & salin"
+              icon="square"
+              onPress={toggleRecording}
+              style={{ marginTop: space.xl, alignSelf: 'stretch' }}
+            />
+            <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.md, textAlign: 'center' }}>
+              Contoh: “tadi makan siang tiga puluh lima ribu”
+            </Txt>
+          </Card>
         ) : (
           <>
             <Card>
@@ -306,31 +378,41 @@ export default function AddScreen() {
               style={{ flex: 1 }}
             />
           </>
+        ) : isRecording ? (
+          // Saat merekam hanya ada satu aksi yang masuk akal.
+          <Button
+            title="Berhenti & salin"
+            icon="square"
+            onPress={toggleRecording}
+            loading={busy}
+            full
+            style={{ flex: 1 }}
+          />
+        ) : busy && status ? (
+          <View style={styles.workingBar}>
+            <ActivityIndicator size="small" color={colors.textMuted} />
+            <Txt variant="caption" color={colors.textMuted}>
+              {status}
+            </Txt>
+          </View>
         ) : (
           <>
             {voiceAvailable ? (
               <Pressable
                 onPress={toggleRecording}
                 disabled={busy}
-                accessibilityLabel={recorder.isRecording ? 'Berhenti merekam' : 'Rekam suara'}
-                style={[
-                  styles.mic,
-                  recorder.isRecording && { backgroundColor: colors.expense },
-                ]}
+                accessibilityLabel="Rekam suara"
+                style={({ pressed }) => [styles.mic, pressed && { borderColor: colors.accent }]}
               >
-                <Feather
-                  name={recorder.isRecording ? 'square' : 'mic'}
-                  size={20}
-                  color={recorder.isRecording ? '#fff' : colors.text}
-                />
+                <Feather name="mic" size={20} color={colors.text} />
               </Pressable>
             ) : null}
             <Button
-              title={recorder.isRecording ? 'Merekam…' : 'Urai'}
+              title="Urai"
               icon="arrow-right"
               onPress={() => void runParse(text)}
               loading={busy}
-              disabled={!text.trim() || recorder.isRecording}
+              disabled={!text.trim()}
               style={{ flex: 1 }}
             />
           </>
@@ -384,6 +466,20 @@ const styles = {
     textAlignVertical: 'top' as const,
     padding: 0,
     lineHeight: 22,
+  },
+  recDot: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.expense,
+  },
+  workingBar: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: space.sm,
+    height: size.touchMin,
   },
   manualBtn: {
     flexDirection: 'row' as const,

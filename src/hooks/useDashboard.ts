@@ -5,7 +5,6 @@
  */
 import { useMemo } from 'react';
 import { useData } from '@/store/data';
-import { useSession } from '@/store/session';
 import { useMoney } from '@/hooks/useMoney';
 import {
   computeBalance,
@@ -39,7 +38,6 @@ export interface DashboardData {
 
 export function useDashboard(now: Date = new Date()): DashboardData {
   const { accounts, transactions, budgets, loading } = useData();
-  const { profile } = useSession();
   const { money, compact } = useMoney();
 
   // `now` sengaja tidak masuk daftar dependensi: objek Date baru dibuat setiap
@@ -94,7 +92,7 @@ export function useDashboard(now: Date = new Date()): DashboardData {
       budgets.map((b) => Math.max(0, Number(b.amount) - (spentByCategory.get(b.category_name) ?? 0))),
     );
 
-    const safe = safeToSpend(balance, profile?.payday_day ?? 25, reserved, now);
+    const safe = safeToSpend(balance, reserved, now);
 
     const slices: Slice[] = [...spentByCategory.entries()].map(([label, value]) => ({
       label,
@@ -135,5 +133,5 @@ export function useDashboard(now: Date = new Date()): DashboardData {
       loading,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, transactions, budgets, profile?.payday_day, loading, money, compact]);
+  }, [accounts, transactions, budgets, loading, money, compact]);
 }
