@@ -1,4 +1,10 @@
-import { findAmounts, parseIndonesianNumber, parseLocal, splitSegments } from './localParser';
+import {
+  findAmounts,
+  parseIndonesianNumber,
+  parseLocal,
+  splitSegments,
+  type ParserOptions,
+} from './localParser';
 import type { Account, Category } from '@/types/db';
 
 const NOW = new Date(2026, 7, 20, 14, 30); // Kamis, 20 Agustus 2026
@@ -296,5 +302,89 @@ describe('parseLocal — nama merchant', () => {
   it('membuang metode bayar dari ekor nama merchant', () => {
     const { drafts } = parse('makan di padang 45rb gopay');
     expect(drafts[0]!.merchant).toBe('Padang');
+  });
+});
+
+// ---------------------------------------------------------------------
+// Bahasa Inggris
+// ---------------------------------------------------------------------
+
+const EN: ParserOptions = { locale: 'en', bareNumberIsThousands: false };
+const EN_BIG: ParserOptions = { locale: 'en', bareNumberIsThousands: true };
+
+const EN_CATEGORIES: Category[] = [
+  cat('Food & Drink', ['food', 'coffee', 'lunch', 'dinner', 'groceries']),
+  cat('Transport', ['fuel', 'parking', 'taxi', 'train']),
+  cat('Other', []),
+  cat('Salary', ['salary', 'payroll'], 'income'),
+];
+
+function parseEn(text: string, options: ParserOptions = EN) {
+  return parseLocal(text, EN_CATEGORIES, ACCOUNTS, NOW, 'ai_text', options);
+}
+
+describe('parser bahasa Inggris', () => {
+  it('membaca nominal bersatuan k', () => {
+    const { drafts } = parseEn('coffee 25k');
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]!.amount).toBe(25_000);
+    expect(drafts[0]!.category_name).toBe('Food & Drink');
+  });
+
+  it('"m" berarti juta, bukan miliar', () => {
+    // Perbedaan yang sama sekali tidak boleh tertukar: dalam bahasa Indonesia
+    // "5m" adalah lima miliar.
+    expect(findAmounts('bonus 5m', EN)[0]!.value).toBe(5_000_000);
+    expect(findAmounts('bonus 5m')[0]!.value).toBe(5_000_000_000);
+  });
+
+  it('mengenali "yesterday" dan "last night"', () => {
+    const y = parseEn('yesterday lunch 12');
+    expect(new Date(y.drafts[0]!.occurred_at).getDate()).toBe(19);
+
+    const n = parseEn('last night dinner 30');
+    const at = new Date(n.drafts[0]!.occurred_at);
+    expect(at.getDate()).toBe(19);
+    expect(at.getHours()).toBe(20);
+  });
+
+  it('mengenali pemasukan', () => {
+    const { drafts } = parseEn('salary 3500');
+    expect(drafts[0]!.kind).toBe('income');
+    expect(drafts[0]!.category_name).toBe('Salary');
+  });
+
+  it('memisah beberapa transaksi dengan koma dan "then"', () => {
+    const { drafts } = parseEn('fuel 50k, coffee 4k then lunch 12k');
+    expect(drafts).toHaveLength(3);
+    expect(drafts.map((d) => d.amount)).toEqual([50_000, 4_000, 12_000]);
+  });
+
+  it('memisah dengan "and" bila kedua sisinya punya nominal', () => {
+    expect(splitSegments('fuel 50k and coffee 4k', EN)).toEqual(['fuel 50k', 'coffee 4k']);
+  });
+
+  it('tidak memisah "and" yang bukan pemisah transaksi', () => {
+    expect(splitSegments('lunch with mom and dad 40k', EN)).toEqual(['lunch with mom and dad 40k']);
+  });
+});
+
+describe('angka polos mengikuti mata uang', () => {
+  it('pada mata uang bernominal besar, 35 berarti 35.000', () => {
+    const found = findAmounts('lunch 35', EN_BIG)[0]!;
+    expect(found.value).toBe(35_000);
+    // Ditandai tidak eksplisit supaya user diminta memeriksa.
+    expect(found.explicit).toBe(false);
+  });
+
+  it('pada dolar atau euro, 35 tetap 35', () => {
+    // Aturan yang sama akan mengubah makan siang $35 menjadi $35.000.
+    const found = findAmounts('lunch 35', EN)[0]!;
+    expect(found.value).toBe(35);
+    expect(found.explicit).toBe(true);
+  });
+
+  it('satuan eksplisit tetap berlaku di mata uang mana pun', () => {
+    expect(findAmounts('lunch 35k', EN)[0]!.value).toBe(35_000);
   });
 });

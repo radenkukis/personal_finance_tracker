@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Profile } from '@/types/db';
 import type { Dictionary } from '@/lib/i18n';
+import { deviceLocale } from '@/lib/i18n/device';
 
 interface SessionState {
   session: Session | null;
@@ -62,9 +63,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (error) throw new Error(authErrorCode(error.message));
       },
       signUp: async (email, password) => {
+        /*
+         * Bahasa HP dititipkan di sini karena inilah satu-satunya kesempatan:
+         * trigger di database memakainya untuk menyemai kategori awal dalam
+         * bahasa yang sama, di transaksi yang sama dengan pembuatan profil.
+         */
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: { data: { language: deviceLocale() } },
         });
         if (error) throw new Error(authErrorCode(error.message));
         // Kalau konfirmasi email diaktifkan, session belum terbit.

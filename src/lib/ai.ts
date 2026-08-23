@@ -7,7 +7,9 @@
  * muncul seketika.
  */
 import { callFunction } from '@/lib/supabase';
-import { parseLocal } from '@/lib/localParser';
+import { parseLocal, type ParserOptions } from '@/lib/localParser';
+import { hasLargeDenomination } from '@/lib/currency';
+import { PARSER_LOCALES, type Locale } from '@/lib/i18n';
 import type { Account, Category, DraftTransaction, TxSource } from '@/types/db';
 import type { Finding } from '@/analytics/detectors';
 import { en, interpolate, type Dictionary } from '@/lib/i18n';
@@ -17,6 +19,26 @@ export type AiMode = 'local' | 'remote';
 /** 'local' = gratis 100%, tanpa API key. 'remote' = lewat Edge Function. */
 export function aiMode(): AiMode {
   return process.env.EXPO_PUBLIC_AI_MODE === 'remote' ? 'remote' : 'local';
+}
+
+/** Bahasa dan mata uang yang sedang dipakai user. */
+export interface ReaderSettings {
+  locale: Locale;
+  currency: string;
+}
+
+/**
+ * Bahasa yang belum punya parser sendiri tetap dicoba dengan aturan Inggris.
+ * Angka dan singkatan "k"/"m" sama di mana-mana, jadi "Kaffee 25" tetap
+ * terbaca gratis walau kata "gestern" tidak dikenali — lebih baik daripada
+ * mengirim setiap catatan ke AI.
+ */
+function parserOptions(reader: ReaderSettings): ParserOptions {
+  const supported = PARSER_LOCALES.includes(reader.locale);
+  return {
+    locale: supported && reader.locale === 'id' ? 'id' : 'en',
+    bareNumberIsThousands: hasLargeDenomination(reader.currency),
+  };
 }
 
 export interface ParseOutcome {
@@ -46,8 +68,9 @@ export async function smartParse(
   source: TxSource = 'ai_text',
   /* Kalimat peringatan ikut bahasa user; yang dihitung tetap sama. */
   d: Dictionary = en,
+  reader: ReaderSettings = { locale: 'en', currency: 'IDR' },
 ): Promise<ParseOutcome> {
-  const local = parseLocal(text, categories, accounts, new Date(), source);
+  const local = parseLocal(text, categories, accounts, new Date(), source, parserOptions(reader));
 
   /*
    * Parser lokal bisa menemukan nominalnya tapi gagal mengenali kategorinya —

@@ -23,11 +23,18 @@ export interface ParseResult {
 // Kamus
 // ---------------------------------------------------------------------
 
-const INCOME_WORDS = [
-  'gaji', 'gajian', 'salary', 'thr', 'bonus', 'komisi', 'fee', 'honor',
-  'dapat', 'dapet', 'terima', 'diterima', 'masuk', 'transferan', 'refund',
-  'cashback', 'kembalian dari', 'jual', 'laku', 'dividen', 'bunga', 'menang',
-];
+const INCOME_WORDS: Record<ParserLocale, string[]> = {
+  id: [
+    'gaji', 'gajian', 'salary', 'thr', 'bonus', 'komisi', 'fee', 'honor',
+    'dapat', 'dapet', 'terima', 'diterima', 'masuk', 'transferan', 'refund',
+    'cashback', 'kembalian dari', 'jual', 'laku', 'dividen', 'bunga', 'menang',
+  ],
+  en: [
+    'salary', 'payroll', 'paycheck', 'wage', 'bonus', 'commission', 'fee',
+    'got paid', 'received', 'earned', 'income', 'refund', 'cashback',
+    'reimbursed', 'sold', 'dividend', 'interest', 'won',
+  ],
+};
 
 /** Alias metode bayar -> kata yang dicocokkan dengan nama dompet user. */
 export const ACCOUNT_ALIASES: Record<string, string> = {
@@ -44,8 +51,26 @@ export const ACCOUNT_ALIASES: Record<string, string> = {
   atm: 'bank', mbanking: 'bank',
 };
 
+/**
+ * Bahasa yang parser di HP mengerti. Selain ini, catatan diteruskan ke AI:
+ * tetap berfungsi penuh, hanya tidak instan dan memakai kuota.
+ */
+export type ParserLocale = 'id' | 'en';
+
 /** Kata waktu -> pergeseran hari dan jam kejadian. */
-const TIME_WORDS: { pattern: RegExp; dayOffset: number; hour?: number }[] = [
+const TIME_WORDS: Record<ParserLocale, { pattern: RegExp; dayOffset: number; hour?: number }[]> = {
+  en: [
+    { pattern: /\bday\s+before\s+yesterday\b/i, dayOffset: -2 },
+    { pattern: /\blast\s+week\b/i, dayOffset: -7 },
+    { pattern: /\blast\s+night\b/i, dayOffset: -1, hour: 20 },
+    { pattern: /\byesterday\b/i, dayOffset: -1 },
+    { pattern: /\bthis\s+morning\b/i, dayOffset: 0, hour: 7 },
+    { pattern: /\bthis\s+afternoon\b/i, dayOffset: 0, hour: 15 },
+    { pattern: /\bthis\s+evening\b|\btonight\b/i, dayOffset: 0, hour: 19 },
+    { pattern: /\bjust\s+now\b/i, dayOffset: 0 },
+    { pattern: /\btoday\b/i, dayOffset: 0 },
+  ],
+  id: [
   { pattern: /\bkemarin\s+lusa\b/i, dayOffset: -2 },
   { pattern: /\bkemaren\s+lusa\b/i, dayOffset: -2 },
   { pattern: /\bminggu\s+lalu\b/i, dayOffset: -7 },
@@ -59,24 +84,54 @@ const TIME_WORDS: { pattern: RegExp; dayOffset: number; hour?: number }[] = [
   { pattern: /\btadi\s+sore\b/i, dayOffset: 0, hour: 16 },
   { pattern: /\bbarusan\b/i, dayOffset: 0 },
   { pattern: /\bhari\s+ini\b/i, dayOffset: 0 },
-  { pattern: /\btadi\b/i, dayOffset: 0 },
-];
+    { pattern: /\btadi\b/i, dayOffset: 0 },
+  ],
+};
 
-const MULTIPLIERS: Record<string, number> = {
-  rb: 1_000, ribu: 1_000, k: 1_000,
-  jt: 1_000_000, juta: 1_000_000, jeti: 1_000_000,
-  m: 1_000_000_000, miliar: 1_000_000_000, milyar: 1_000_000_000,
+/*
+ * "m" berarti hal yang berbeda di dua bahasa: dalam percakapan Indonesia
+ * "5m" adalah lima miliar, dalam bahasa Inggris "5m" adalah lima juta.
+ * Satu tabel bersama akan membuat salah satunya salah seribu kali lipat,
+ * jadi tabelnya dipisah per bahasa.
+ */
+const MULTIPLIERS: Record<ParserLocale, Record<string, number>> = {
+  id: {
+    rb: 1_000, ribu: 1_000, k: 1_000,
+    jt: 1_000_000, juta: 1_000_000, jeti: 1_000_000,
+    m: 1_000_000_000, miliar: 1_000_000_000, milyar: 1_000_000_000,
+  },
+  en: {
+    k: 1_000, rb: 1_000,
+    m: 1_000_000, mil: 1_000_000, mn: 1_000_000,
+    b: 1_000_000_000, bn: 1_000_000_000,
+  },
 };
 
 /**
- * Angka bernilai kecil tanpa satuan ("makan 35") dalam percakapan sehari-hari
- * hampir selalu berarti ribuan. Diterapkan, tapi keyakinannya diturunkan
- * supaya user diminta memeriksa.
+ * Angka bernilai kecil tanpa satuan ("makan 35") berarti ribuan HANYA pada
+ * mata uang yang nominal sehari-harinya memang di kisaran ribuan. Pada dolar
+ * atau euro, aturan yang sama akan mengubah makan siang 35 menjadi 35.000 —
+ * jadi di sana angka polos diambil apa adanya.
  */
 const BARE_NUMBER_THOUSAND_CUTOFF = 1_000;
 
 const AMOUNT_RE =
-  /(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+|\d+(?:[,.]\d+)?)\s*(rb|ribu|k|jt|juta|jeti|m|miliar|milyar)?\b/gi;
+  /(?:rp\.?\s*|[$\u20ac\u00a3\u00a5\u20a9]\s*)?(\d{1,3}(?:\.\d{3})+|\d{1,3}(?:,\d{3})+|\d+(?:[,.]\d+)?)\s*(rb|ribu|k|jt|juta|jeti|mil|mn|bn|m|b|miliar|milyar)?\b/gi;
+
+/** Bagaimana sebuah kalimat harus dibaca. */
+export interface ParserOptions {
+  locale: ParserLocale;
+  /**
+   * true bila mata uang user bernominal besar (Rupiah, Dong, Won...) sehingga
+   * "makan 35" wajar ditafsirkan 35.000.
+   */
+  bareNumberIsThousands: boolean;
+}
+
+export const DEFAULT_PARSER_OPTIONS: ParserOptions = {
+  locale: 'id',
+  bareNumberIsThousands: true,
+};
 
 // ---------------------------------------------------------------------
 // Titik masuk
@@ -88,6 +143,7 @@ export function parseLocal(
   accounts: readonly Account[],
   now: Date = new Date(),
   source: TxSource = 'ai_text',
+  options: ParserOptions = DEFAULT_PARSER_OPTIONS,
 ): ParseResult {
   const text = input.trim();
   if (!text) return { drafts: [], needsAI: false, unparsed: [] };
@@ -95,8 +151,8 @@ export function parseLocal(
   const drafts: DraftTransaction[] = [];
   const unparsed: string[] = [];
 
-  for (const segment of splitSegments(text)) {
-    const amounts = findAmounts(segment);
+  for (const segment of splitSegments(text, options)) {
+    const amounts = findAmounts(segment, options);
 
     if (amounts.length === 0) {
       // Tidak ada angka sama sekali — bukan transaksi, atau kalimatnya rumit.
@@ -109,7 +165,7 @@ export function parseLocal(
       continue;
     }
 
-    drafts.push(buildDraft(segment, amounts[0]!, text, categories, accounts, now, source));
+    drafts.push(buildDraft(segment, amounts[0]!, text, categories, accounts, now, source, options));
   }
 
   return { drafts, needsAI: unparsed.length > 0, unparsed };
@@ -125,17 +181,20 @@ export function parseLocal(
  * Kata "dan"/"sama" hanya dipakai sebagai pemisah bila kedua sisinya
  * mengandung angka — supaya "makan sama temen" tidak ikut terbelah.
  */
-export function splitSegments(text: string): string[] {
+export function splitSegments(
+  text: string,
+  options: ParserOptions = DEFAULT_PARSER_OPTIONS,
+): string[] {
   const primary = text
-    .split(/[,;]|\bterus\b|\blalu\b|\bkemudian\b|\btrus\b/i)
+    .split(/[,;]|\bterus\b|\blalu\b|\bkemudian\b|\btrus\b|\bthen\b/i)
     .map((s) => s.trim())
     .filter(Boolean);
 
   const out: string[] = [];
   for (const piece of primary) {
-    if (countAmounts(piece) > 1) {
-      const parts = piece.split(/\bdan\b|\bsama\b|\+/i).map((s) => s.trim()).filter(Boolean);
-      const allHaveAmounts = parts.length > 1 && parts.every((p) => countAmounts(p) >= 1);
+    if (countAmounts(piece, options) > 1) {
+      const parts = piece.split(/\bdan\b|\bsama\b|\band\b|\+/i).map((s) => s.trim()).filter(Boolean);
+      const allHaveAmounts = parts.length > 1 && parts.every((p) => countAmounts(p, options) >= 1);
       if (allHaveAmounts) {
         out.push(...parts);
         continue;
@@ -145,7 +204,7 @@ export function splitSegments(text: string): string[] {
     // "sarapan 18rb makan siang 42rb bensin 50rb" tanpa koma sama sekali
     // adalah bentuk yang sangat wajar diketik orang, dan sebelumnya selalu
     // dilempar ke AI — belasan detik untuk sesuatu yang bisa instan.
-    const byAmount = splitAtAmountBoundaries(piece);
+    const byAmount = splitAtAmountBoundaries(piece, options);
     if (byAmount) {
       out.push(...byAmount);
       continue;
@@ -164,8 +223,8 @@ export function splitSegments(text: string): string[] {
  * "beli 2" — melahirkan transaksi Rp 2.000 yang tidak pernah ada. Kalimat
  * seperti itu memang lebih aman diserahkan ke AI.
  */
-function splitAtAmountBoundaries(piece: string): string[] | null {
-  const amounts = findAmounts(piece);
+function splitAtAmountBoundaries(piece: string, options: ParserOptions): string[] | null {
+  const amounts = findAmounts(piece, options);
   if (amounts.length < 2) return null;
   if (!amounts.every((a) => a.explicit)) return null;
 
@@ -242,9 +301,13 @@ function maskDateTokens(segment: string): string {
     .replace(/\bjam\s*\d{1,2}(?:[.:]\d{2})?\b/gi, ' ');
 }
 
-export function findAmounts(segment: string): FoundAmount[] {
+export function findAmounts(
+  segment: string,
+  options: ParserOptions = DEFAULT_PARSER_OPTIONS,
+): FoundAmount[] {
   const out: FoundAmount[] = [];
   const masked = maskDateTokens(segment);
+  const multipliers = MULTIPLIERS[options.locale];
   AMOUNT_RE.lastIndex = 0;
 
   let match: RegExpExecArray | null;
@@ -257,9 +320,9 @@ export function findAmounts(segment: string): FoundAmount[] {
     if (base === null || base <= 0) continue;
 
     const unit = suffix?.toLowerCase();
-    if (unit && MULTIPLIERS[unit]) {
-      out.push({ value: base * MULTIPLIERS[unit]!, raw, explicit: true, end });
-    } else if (base >= BARE_NUMBER_THOUSAND_CUTOFF) {
+    if (unit && multipliers[unit]) {
+      out.push({ value: base * multipliers[unit]!, raw, explicit: true, end });
+    } else if (base >= BARE_NUMBER_THOUSAND_CUTOFF || !options.bareNumberIsThousands) {
       out.push({ value: base, raw, explicit: true, end });
     } else {
       // "makan 35" -> 35.000, tapi ditandai tidak eksplisit.
@@ -269,8 +332,8 @@ export function findAmounts(segment: string): FoundAmount[] {
   return out;
 }
 
-function countAmounts(segment: string): number {
-  return findAmounts(segment).length;
+function countAmounts(segment: string, options: ParserOptions): number {
+  return findAmounts(segment, options).length;
 }
 
 /**
@@ -301,14 +364,22 @@ function buildDraft(
   accounts: readonly Account[],
   now: Date,
   source: TxSource,
+  options: ParserOptions,
 ): DraftTransaction {
   const lower = segment.toLowerCase();
 
-  const kind: TxKind = INCOME_WORDS.some((w) => lower.includes(w)) ? 'income' : 'expense';
+  /*
+   * Kata utuh, bukan potongan. Dengan pencocokan substring, "coffee" memuat
+   * "fee" dan segelas kopi tercatat sebagai pemasukan — kesalahan yang tidak
+   * kelihatan sampai grafik pemasukan membengkak tanpa sebab.
+   */
+  const kind: TxKind = INCOME_WORDS[options.locale].some((w) => containsWord(lower, w))
+    ? 'income'
+    : 'expense';
 
   // Kata waktu bisa muncul sekali di awal kalimat ("kemarin bensin 50k, kopi
   // 22k") dan berlaku untuk semua potongan — jadi dicari di teks utuh juga.
-  const occurred = resolveDate(segment, fullText, now);
+  const occurred = resolveDate(segment, fullText, now, options.locale);
 
   const category = matchCategory(lower, categories, kind);
   const account = matchAccount(lower, accounts);
@@ -339,7 +410,12 @@ function buildDraft(
 // Tanggal
 // ---------------------------------------------------------------------
 
-export function resolveDate(segment: string, fullText: string, now: Date): Date {
+export function resolveDate(
+  segment: string,
+  fullText: string,
+  now: Date,
+  locale: ParserLocale = 'id',
+): Date {
   // "tgl 12" / "tanggal 12"
   const explicitDay = /\b(?:tgl|tanggal)\s*(\d{1,2})\b/i.exec(segment) ?? /\b(?:tgl|tanggal)\s*(\d{1,2})\b/i.exec(fullText);
   if (explicitDay?.[1]) {
@@ -364,7 +440,15 @@ export function resolveDate(segment: string, fullText: string, now: Date): Date 
     }
   }
 
-  for (const w of TIME_WORDS) {
+  /*
+   * Kata waktu kedua bahasa selalu dicoba, bukan hanya bahasa yang aktif.
+   * Orang Indonesia menulis "meeting lunch yesterday" tanpa merasa berpindah
+   * bahasa, dan tidak ada kata di satu daftar yang berarti lain di daftar
+   * satunya — jadi mencocokkan keduanya tidak berisiko. Bahasa yang aktif
+   * hanya menentukan siapa yang diperiksa lebih dulu.
+   */
+  const other: ParserLocale = locale === 'id' ? 'en' : 'id';
+  for (const w of [...TIME_WORDS[locale], ...TIME_WORDS[other]]) {
     if (w.pattern.test(segment) || w.pattern.test(fullText)) {
       const d = new Date(now);
       d.setDate(d.getDate() + w.dayOffset);

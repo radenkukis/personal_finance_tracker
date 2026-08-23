@@ -85,8 +85,8 @@ export default function AddScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { categories, accounts, saveDrafts, recordCorrection } = useData();
-  const { d, fill } = useT();
-  const { money } = useMoney();
+  const { d, fill, locale } = useT();
+  const { money, currency } = useMoney();
 
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState<DraftTransaction[] | null>(null);
@@ -119,7 +119,10 @@ export default function AddScreen() {
       setError(null);
       setStatus(null);
       try {
-        const outcome = await smartParse(trimmed, categories, accounts, source, d);
+        const outcome = await smartParse(trimmed, categories, accounts, source, d, {
+          locale,
+          currency: currency.code,
+        });
         if (outcome.drafts.length === 0) {
           setError(outcome.warning ?? d.add.nothingParsed);
           return;
@@ -133,7 +136,7 @@ export default function AddScreen() {
         setBusy(false);
       }
     },
-    [categories, accounts, d],
+    [categories, accounts, d, locale, currency],
   );
 
   // -------------------------------------------------------------------

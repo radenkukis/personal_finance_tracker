@@ -103,6 +103,22 @@ export const CURRENCIES: Currency[] = [
 const DEFAULT = CURRENCIES[0] as Currency;
 
 /** Kode tak dikenal (mis. data lama) jatuh ke Rupiah, bukan bikin app error. */
+/**
+ * Mata uang yang nominal sehari-harinya sudah di kisaran ribuan ke atas.
+ *
+ * Hanya di sini "makan 35" wajar dibaca 35.000. Menerapkan aturan yang sama
+ * pada dolar atau euro akan mengubah makan siang 35 menjadi 35.000 — salah
+ * seribu kali lipat, dan salah ke arah yang tidak akan disadari user sampai
+ * saldo bulanannya terlihat aneh.
+ */
+const LARGE_DENOMINATION = new Set([
+  'IDR', 'VND', 'LAK', 'KHR', 'MMK', 'UZS', 'IRR', 'PYG', 'COP', 'CLP', 'KRW', 'LBP',
+]);
+
+export function hasLargeDenomination(code: string | null | undefined): boolean {
+  return LARGE_DENOMINATION.has((code ?? '').toUpperCase());
+}
+
 export function getCurrency(code: string | null | undefined): Currency {
   if (!code) return DEFAULT;
   return CURRENCIES.find((c) => c.code === code.toUpperCase()) ?? DEFAULT;
