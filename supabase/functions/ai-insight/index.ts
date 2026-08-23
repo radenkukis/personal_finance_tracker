@@ -12,6 +12,7 @@
  */
 import { fail, json, serveAuthed } from '../_shared/http.ts';
 import { insight, llmProvider } from '../_shared/providers.ts';
+import { readVoice } from '../_shared/voice.ts';
 
 interface Finding {
   kind: string;
@@ -44,7 +45,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     return json({ summary: recent.body, cached: true, provider: llmProvider() });
   }
 
-  const summary = await insight(JSON.stringify(findings, null, 2));
+  const summary = await insight(JSON.stringify(findings, null, 2), await readVoice(ctx.db));
   if (!summary) return fail('AI tidak mengembalikan ringkasan.', 502);
 
   const severity = findings.some((f) => f.severity === 'danger')

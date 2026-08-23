@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { Card, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space } from '@/lib/theme';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import type { SafeToSpend } from '@/analytics/projection';
 
 export function SafeToSpendCard({
@@ -20,6 +21,7 @@ export function SafeToSpendCard({
   spentToday: number;
 }) {
   const { money } = useMoney();
+  const { d, fill } = useT();
   const usedRatio = data.perDay > 0 ? Math.min(1, spentToday / data.perDay) : 0;
   const overToday = spentToday > data.perDay && data.perDay > 0;
 
@@ -29,7 +31,7 @@ export function SafeToSpendCard({
     <Card style={{ padding: space.lg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
         <Txt variant="overline" color={colors.textFaint}>
-          {data.overdrawn ? 'Saldo minus' : 'Aman dipakai hari ini'}
+          {data.overdrawn ? d.home.overdrawn : d.home.safeToSpend}
         </Txt>
       </View>
 
@@ -39,8 +41,8 @@ export function SafeToSpendCard({
 
       <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2 }}>
         {data.overdrawn
-          ? 'Pengeluaran sudah melewati pemasukan yang tercatat.'
-          : `per hari sampai akhir bulan · ${data.daysLeft} hari lagi`}
+          ? d.home.overdrawnBody
+          : fill(d.home.perDayUntilMonthEnd, { days: data.daysLeft })}
       </Txt>
 
       {/* Bilah tipis: berapa banyak jatah hari ini yang sudah terpakai. */}
@@ -59,18 +61,20 @@ export function SafeToSpendCard({
 
           <View style={styles.footer}>
             <Txt variant="caption" color={colors.textMuted}>
-              Terpakai hari ini {money(spentToday)}
+              {fill(d.home.spentToday, { amount: money(spentToday) })}
             </Txt>
             {overToday ? (
               <View style={[styles.pill, { backgroundColor: withAlpha(colors.warning, 0.14) }]}>
                 <Feather name="alert-triangle" size={11} color={colors.warning} />
                 <Txt variant="caption" color={colors.warning}>
-                  Lewat jatah
+                  {d.home.overBudgetToday}
                 </Txt>
               </View>
             ) : (
               <Txt variant="caption" color={colors.textFaint}>
-                sisa {money(Math.max(0, Math.floor(data.perDay - spentToday)))}
+                {fill(d.home.remaining, {
+                  amount: money(Math.max(0, Math.floor(data.perDay - spentToday))),
+                })}
               </Txt>
             )}
           </View>

@@ -12,11 +12,12 @@ import {
   buildParseSystemPrompt,
   buildParseUserPrompt,
   CHAT_SCHEMA_GEMINI,
-  CHAT_SYSTEM_PROMPT,
-  INSIGHT_SYSTEM_PROMPT,
+  buildChatSystemPrompt,
+  buildInsightSystemPrompt,
   type ChatResult,
   type ParsedTx,
   type PromptContext,
+  type UserVoice,
 } from './prompts.ts';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -132,9 +133,10 @@ export async function geminiChat(
   question: string,
   dataSummary: string,
   history: { role: 'user' | 'assistant'; content: string }[],
+  voice: UserVoice,
 ): Promise<ChatResult> {
   const raw = await call({
-    systemInstruction: { parts: [{ text: CHAT_SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: buildChatSystemPrompt(voice) }] },
     contents: [
       // Gemini memakai "model", bukan "assistant", untuk giliran balasan.
       ...history.map((h) => ({
@@ -171,9 +173,9 @@ export async function geminiChat(
 // Narasi insight
 // ---------------------------------------------------------------------
 
-export async function geminiInsight(findingsJson: string): Promise<string> {
+export async function geminiInsight(findingsJson: string, voice: UserVoice): Promise<string> {
   return await call({
-    systemInstruction: { parts: [{ text: INSIGHT_SYSTEM_PROMPT }] },
+    systemInstruction: { parts: [{ text: buildInsightSystemPrompt(voice) }] },
     contents: [
       { role: 'user', parts: [{ text: `Temuan minggu ini:\n${findingsJson}\n\nTulis ringkasannya.` }] },
     ],

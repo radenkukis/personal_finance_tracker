@@ -18,8 +18,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Feather } from '@expo/vector-icons';
 import { Card, Divider, IconBadge, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
-import { clockTime, relativeDay } from '@/lib/format';
+import { clockTime } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import { sameCategoryName } from '@/lib/categories';
 import type { Category, DraftTransaction } from '@/types/db';
 
@@ -64,6 +65,7 @@ export function TransactionEditorCard({
   onRemove?: () => void;
 }) {
   const { currency } = useMoney();
+  const { d, relativeDay } = useT();
   const [picking, setPicking] = useState<'date' | 'time' | null>(null);
 
   const uncertain = draft.confidence < LOW_CONFIDENCE;
@@ -98,7 +100,7 @@ export function TransactionEditorCard({
               category_is_new: false,
             })
           }
-          accessibilityLabel="Ganti jenis transaksi"
+          accessibilityLabel={d.editor.changeKind}
           style={{ alignItems: 'center', gap: 3 }}
         >
           <IconBadge
@@ -107,13 +109,13 @@ export function TransactionEditorCard({
             diameter={32}
           />
           <Txt variant="caption" color={colors.textFaint}>
-            {draft.kind === 'income' ? 'masuk' : 'keluar'}
+            {draft.kind === 'income' ? d.common.income : d.common.expense}
           </Txt>
         </Pressable>
 
         <View style={{ flex: 1 }}>
           <Txt variant="overline" color={colors.textFaint}>
-            Nominal
+            {d.editor.amount}
           </Txt>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Txt variant="displaySm" color={colors.textMuted}>
@@ -125,13 +127,13 @@ export function TransactionEditorCard({
               keyboardType="number-pad"
               selectTextOnFocus
               style={[type.displaySm, { color: colors.text, flex: 1, padding: 0 }]}
-              accessibilityLabel="Nominal transaksi"
+              accessibilityLabel={d.editor.amount}
             />
           </View>
         </View>
 
         {onRemove ? (
-          <Pressable onPress={onRemove} accessibilityLabel="Hapus draft ini" hitSlop={10}>
+          <Pressable onPress={onRemove} accessibilityLabel={d.editor.removeDraft} hitSlop={10}>
             <Feather name="x" size={18} color={colors.textFaint} />
           </Pressable>
         ) : null}
@@ -141,7 +143,7 @@ export function TransactionEditorCard({
         <View style={styles.warnRow}>
           <Feather name="alert-triangle" size={12} color={colors.warning} />
           <Txt variant="caption" color={colors.warning}>
-            Kurang yakin — mohon dicek dulu
+            {d.editor.lowConfidence}
           </Txt>
         </View>
       ) : null}
@@ -155,24 +157,24 @@ export function TransactionEditorCard({
         <TextInput
           value={draft.merchant ?? ''}
           onChangeText={(v) => onChange({ merchant: v.trim() ? v : null })}
-          placeholder="Nama tempat (opsional)"
+          placeholder={d.editor.merchantPlaceholder}
           placeholderTextColor={colors.textFaint}
           style={[type.body, styles.input]}
-          accessibilityLabel="Nama tempat"
+          accessibilityLabel={d.editor.merchantPlaceholder}
         />
         <TextInput
           value={draft.note ?? ''}
           onChangeText={(v) => onChange({ note: v.trim() ? v : null })}
-          placeholder="Catatan — beli apa persisnya (opsional)"
+          placeholder={d.editor.notePlaceholder}
           placeholderTextColor={colors.textFaint}
           style={[type.body, styles.input]}
-          accessibilityLabel="Catatan"
+          accessibilityLabel={d.editor.notePlaceholder}
         />
       </View>
 
       {/* Kategori */}
       <Txt variant="overline" color={colors.textFaint} style={{ marginTop: space.md }}>
-        Kategori
+        {d.editor.category}
       </Txt>
       <ScrollView
         horizontal
@@ -184,7 +186,7 @@ export function TransactionEditorCard({
             onPress={() => onChange({ category_is_new: true, category_name: proposed })}
             accessibilityRole="button"
             accessibilityState={{ selected: true }}
-            accessibilityLabel={`Kategori baru ${proposed}`}
+            accessibilityLabel={proposed}
             style={[
               styles.chip,
               styles.newChip,
@@ -197,7 +199,7 @@ export function TransactionEditorCard({
             </Txt>
             <View style={styles.newBadge}>
               <Txt variant="caption" color={colors.bg}>
-                baru
+                {d.editor.newBadge}
               </Txt>
             </View>
           </Pressable>
@@ -216,8 +218,7 @@ export function TransactionEditorCard({
 
       {proposed ? (
         <Txt variant="caption" color={colors.textFaint} style={{ lineHeight: 16 }}>
-          Kategori baru akan dibuat saat kamu menyimpan. Pilih kategori lain di
-          sampingnya kalau tidak jadi.
+          {d.editor.newCategoryHint}
         </Txt>
       ) : null}
 
@@ -225,7 +226,7 @@ export function TransactionEditorCard({
       <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
         <Pressable
           onPress={() => setPicking('date')}
-          accessibilityLabel="Ganti tanggal"
+          accessibilityLabel={d.editor.changeDate}
           style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
         >
           <Feather name="calendar" size={13} color={colors.textFaint} />
@@ -234,7 +235,7 @@ export function TransactionEditorCard({
 
         <Pressable
           onPress={() => setPicking('time')}
-          accessibilityLabel="Ganti jam"
+          accessibilityLabel={d.editor.changeTime}
           style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
         >
           <Feather name="clock" size={13} color={colors.textFaint} />
@@ -272,10 +273,10 @@ export function TransactionEditorCard({
         <Pressable
           onPress={() => setPicking(null)}
           style={styles.doneBtn}
-          accessibilityLabel="Selesai memilih waktu"
+          accessibilityLabel={d.common.done}
         >
           <Txt variant="caption" color={colors.accent}>
-            Selesai
+            {d.common.done}
           </Txt>
         </Pressable>
       ) : null}

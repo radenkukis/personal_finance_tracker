@@ -27,20 +27,6 @@ export const EMPTY_FILTERS: Filters = {
   maxAmount: null,
 };
 
-export const KIND_LABELS: [KindFilter, string][] = [
-  ['all', 'Semua'],
-  ['expense', 'Keluar'],
-  ['income', 'Masuk'],
-];
-
-export const RANGE_LABELS: [RangeKey, string][] = [
-  ['all', 'Kapan saja'],
-  ['this_month', 'Bulan ini'],
-  ['last_month', 'Bulan lalu'],
-  ['last_7', '7 hari'],
-  ['last_30', '30 hari'],
-];
-
 /** Batas awal-akhir untuk sebuah pilihan rentang. null berarti tidak dibatasi. */
 export function rangeBounds(
   key: RangeKey,

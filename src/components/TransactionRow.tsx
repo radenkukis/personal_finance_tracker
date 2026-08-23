@@ -5,6 +5,7 @@ import { IconBadge, Txt } from '@/components/ui';
 import { colors, size, space } from '@/lib/theme';
 import { clockTime } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import type { TransactionWithRefs } from '@/types/db';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -36,6 +37,7 @@ export function TransactionRow({
   onLongPress?: () => void;
 }) {
   const { signed } = useMoney();
+  const { d } = useT();
   const color = tx.category?.color ?? colors.textFaint;
   const icon = ICONS[tx.category?.icon ?? 'tag'] ?? 'tag';
   /*
@@ -46,7 +48,7 @@ export function TransactionRow({
    */
   const note = tx.note?.trim();
   const merchant = tx.merchant?.trim();
-  const title = merchant || note || tx.category?.name || 'Tanpa kategori';
+  const title = merchant || note || tx.category?.name || d.common.uncategorized;
 
   // Note hanya diulang di baris bawah bila belum dipakai sebagai judul.
   const subtitle = [note && merchant ? note : null, tx.category?.name,

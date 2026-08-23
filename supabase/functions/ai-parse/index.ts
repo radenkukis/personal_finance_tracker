@@ -9,6 +9,7 @@
 import { fail, json, serveAuthed } from '../_shared/http.ts';
 import { llmProvider, parseText } from '../_shared/providers.ts';
 import type { PromptContext } from '../_shared/prompts.ts';
+import { readVoice } from '../_shared/voice.ts';
 
 /** Batas panjang input: menjaga biaya dan menghalangi penyalahgunaan. */
 const MAX_INPUT_CHARS = 1_000;
@@ -33,7 +34,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
   }
 
   const tDb = Date.now();
-  const [categories, accounts, corrections, merchants] = await Promise.all([
+  const [categories, accounts, corrections, merchants, voice] = await Promise.all([
     ctx.db.from('categories').select('name, kind').order('sort_order'),
     ctx.db.from('accounts').select('name').eq('is_archived', false),
     // Koreksi terbaru dipakai sebagai contoh few-shot supaya tebakan
@@ -50,6 +51,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
       .not('merchant', 'is', null)
       .order('occurred_at', { ascending: false })
       .limit(200),
+    readVoice(ctx.db),
   ]);
 
   // Dedup dengan mempertahankan ejaan yang paling baru dipakai.
@@ -67,6 +69,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
   const dbMs = Date.now() - tDb;
 
   const promptContext: PromptContext = {
+    ...voice,
     categories: categories.data ?? [],
     accounts: (accounts.data ?? []).map((a: { name: string }) => a.name),
     corrections: corrections.data ?? [],

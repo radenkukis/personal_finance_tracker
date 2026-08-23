@@ -10,12 +10,13 @@ import {
   buildParseSystemPrompt,
   buildParseUserPrompt,
   CHAT_SCHEMA_GEMINI,
-  CHAT_SYSTEM_PROMPT,
-  INSIGHT_SYSTEM_PROMPT,
+  buildChatSystemPrompt,
+  buildInsightSystemPrompt,
   TRANSACTION_SCHEMA,
   type ChatResult,
   type ParsedTx,
   type PromptContext,
+  type UserVoice,
 } from './prompts.ts';
 
 const MODEL_PARSE = 'claude-haiku-4-5';
@@ -94,12 +95,13 @@ export async function claudeChat(
   question: string,
   dataSummary: string,
   history: { role: 'user' | 'assistant'; content: string }[],
+  voice: UserVoice,
 ): Promise<ChatResult> {
   const response = await client().messages.create({
     model: MODEL_CHAT,
     max_tokens: 1024,
     system: [
-      { type: 'text', text: CHAT_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: buildChatSystemPrompt(voice), cache_control: { type: 'ephemeral' } },
     ],
     thinking: { type: 'adaptive' },
     // Pertanyaan tentang ringkasan angka tidak butuh penalaran mendalam.
@@ -170,14 +172,18 @@ function toJsonSchema(node: unknown): unknown {
 // Narasi insight
 // ---------------------------------------------------------------------
 
-export async function claudeInsight(findingsJson: string): Promise<string> {
+export async function claudeInsight(findingsJson: string, voice: UserVoice): Promise<string> {
   const anthropic = client();
 
   const params = {
     model: MODEL_INSIGHT,
     max_tokens: 1024,
     system: [
-      { type: 'text' as const, text: INSIGHT_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } },
+      {
+        type: 'text' as const,
+        text: buildInsightSystemPrompt(voice),
+        cache_control: { type: 'ephemeral' as const },
+      },
     ],
     thinking: { type: 'adaptive' as const },
     // Analisanya sudah selesai dihitung di HP; model hanya merangkai kalimat,

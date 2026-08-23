@@ -9,7 +9,7 @@
  *   supabase secrets set LLM_PROVIDER=claude ANTHROPIC_API_KEY=...
  */
 import { HttpError } from './http.ts';
-import type { ChatResult, ParsedTx, PromptContext } from './prompts.ts';
+import type { ChatResult, ParsedTx, PromptContext, UserVoice } from './prompts.ts';
 import { claudeChat, claudeInsight, claudeParse } from './claude.ts';
 import { geminiChat, geminiInsight, geminiParse, geminiTranscribe } from './gemini.ts';
 import { groqTranscribe } from './groq.ts';
@@ -53,16 +53,17 @@ export async function chat(
   question: string,
   dataSummary: string,
   history: { role: 'user' | 'assistant'; content: string }[],
+  voice: UserVoice,
 ): Promise<ChatResult> {
   return requireRemote() === 'claude'
-    ? await claudeChat(question, dataSummary, history)
-    : await geminiChat(question, dataSummary, history);
+    ? await claudeChat(question, dataSummary, history, voice)
+    : await geminiChat(question, dataSummary, history, voice);
 }
 
-export async function insight(findingsJson: string): Promise<string> {
+export async function insight(findingsJson: string, voice: UserVoice): Promise<string> {
   return requireRemote() === 'claude'
-    ? await claudeInsight(findingsJson)
-    : await geminiInsight(findingsJson);
+    ? await claudeInsight(findingsJson, voice)
+    : await geminiInsight(findingsJson, voice);
 }
 
 /**

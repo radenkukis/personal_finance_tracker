@@ -1,9 +1,15 @@
 /**
- * Pemilih mata uang: modal berisi daftar lengkap dengan pencarian.
+ * Pemilih bahasa antarmuka.
  *
- * Daftarnya panjang, jadi pencarian ditaruh di atas dan langsung terfokus.
- * Tiap baris memperlihatkan contoh format aslinya — user tahu persis seperti
- * apa nominalnya akan tampil sebelum memilih, bukan sekadar menebak dari kode.
+ * Tiap baris ditulis dalam bahasanya sendiri lebih dulu — orang mencari
+ * "日本語", bukan "Japanese". Nama Inggrisnya tetap ditampilkan kecil di
+ * bawahnya supaya daftar ini masih bisa dibaca oleh siapa pun yang tersesat
+ * ke sini dengan bahasa yang salah.
+ *
+ * Tiap baris juga jujur soal konsekuensinya: bahasa yang parser di HP
+ * mengerti ditandai "instan", sisanya lewat AI. Ini bukan detail teknis —
+ * itu bedanya antara catatan yang tersimpan seketika dan yang menunggu
+ * jaringan.
  */
 import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, TextInput, View } from 'react-native';
@@ -11,34 +17,42 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Divider, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, size, space, type } from '@/lib/theme';
-import { formatMoney, searchCurrencies, type Currency } from '@/lib/currency';
+import { LOCALES, LOCALE_NAMES, PARSER_LOCALES, type Locale } from '@/lib/i18n';
 import { useT } from '@/hooks/useT';
 
-/** Nominal contoh yang cukup besar untuk memperlihatkan pemisah ribuan. */
-const SAMPLE = 1_250_000;
-
-export function CurrencyPicker({
+export function LanguagePicker({
   visible,
   current,
   onPick,
   onClose,
 }: {
   visible: boolean;
-  current: Currency;
-  onPick: (code: string) => void;
+  current: Locale;
+  onPick: (code: Locale) => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { d, fill } = useT();
   const [query, setQuery] = useState('');
 
-  const results = useMemo(() => searchCurrencies(query), [query]);
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return LOCALES;
+    return LOCALES.filter((l) => {
+      const n = LOCALE_NAMES[l];
+      return (
+        l.toLowerCase().includes(q) ||
+        n.native.toLowerCase().includes(q) ||
+        n.english.toLowerCase().includes(q)
+      );
+    });
+  }, [query]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false}>
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-          <Txt variant="title">{d.currencyPicker.title}</Txt>
+          <Txt variant="title">{d.languagePicker.title}</Txt>
           <Pressable onPress={onClose} hitSlop={10} accessibilityLabel={d.common.close}>
             <Feather name="x" size={20} color={colors.textMuted} />
           </Pressable>
@@ -50,12 +64,12 @@ export function CurrencyPicker({
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder={d.currencyPicker.searchPlaceholder}
+              placeholder={d.languagePicker.searchPlaceholder}
               placeholderTextColor={colors.textFaint}
               style={[type.body, { flex: 1, color: colors.text, padding: 0 }]}
-              autoCapitalize="characters"
+              autoCapitalize="none"
               autoCorrect={false}
-              accessibilityLabel={d.currencyPicker.searchPlaceholder}
+              accessibilityLabel={d.languagePicker.searchPlaceholder}
             />
             {query ? (
               <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel={d.common.close}>
@@ -67,7 +81,7 @@ export function CurrencyPicker({
 
         <FlatList
           data={results}
-          keyExtractor={(c) => c.code}
+          keyExtractor={(l) => l}
           contentContainerStyle={{
             paddingHorizontal: space.lg,
             paddingBottom: insets.bottom + space.xxl,
@@ -76,14 +90,17 @@ export function CurrencyPicker({
           ItemSeparatorComponent={Divider}
           ListEmptyComponent={
             <Txt variant="caption" color={colors.textFaint} style={{ paddingVertical: space.xl }}>
-              {fill(d.currencyPicker.noMatch, { query })}
+              {fill(d.languagePicker.noMatch, { query })}
             </Txt>
           }
           renderItem={({ item }) => {
-            const active = item.code === current.code;
+            const active = item === current;
+            const names = LOCALE_NAMES[item];
+            const instant = PARSER_LOCALES.includes(item);
+
             return (
               <Pressable
-                onPress={() => onPick(item.code)}
+                onPress={() => onPick(item)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [
@@ -91,23 +108,33 @@ export function CurrencyPicker({
                   pressed && { backgroundColor: colors.surfacePressed },
                 ]}
               >
-                <View
-                  style={[
-                    styles.codeBadge,
-                    active && { backgroundColor: withAlpha(colors.accent, 0.16) },
-                  ]}
-                >
-                  <Txt variant="caption" color={active ? colors.accent : colors.textMuted}>
-                    {item.code}
+                <View style={{ flex: 1 }}>
+                  <Txt variant="bodyStrong" numberOfLines={1}>
+                    {names.native}
+                  </Txt>
+                  <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
+                    {names.english}
                   </Txt>
                 </View>
 
-                <View style={{ flex: 1 }}>
-                  <Txt variant="bodyStrong" numberOfLines={1}>
-                    {item.name}
-                  </Txt>
-                  <Txt variant="caption" color={colors.textFaint}>
-                    {formatMoney(SAMPLE, item)}
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor: withAlpha(
+                        instant ? colors.accent : colors.textFaint,
+                        0.14,
+                      ),
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={instant ? 'zap' : 'cpu'}
+                    size={10}
+                    color={instant ? colors.accent : colors.textMuted}
+                  />
+                  <Txt variant="caption" color={instant ? colors.accent : colors.textMuted}>
+                    {instant ? d.languagePicker.fastParser : d.languagePicker.aiOnly}
                   </Txt>
                 </View>
 
@@ -148,11 +175,12 @@ const styles = {
     gap: space.md,
     paddingVertical: space.md,
   },
-  codeBadge: {
-    width: 52,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceRaised,
+  badge: {
+    flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
   },
 };

@@ -7,6 +7,8 @@ export interface Profile {
   id: string;
   display_name: string | null;
   currency: string;
+  /** Kode bahasa antarmuka, mis. 'en' atau 'zh-Hant'. null = ikut bahasa HP. */
+  language: string | null;
   monthly_income: number | null;
   payday_day: number;
   created_at: string;

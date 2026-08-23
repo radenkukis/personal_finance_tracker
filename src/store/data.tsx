@@ -24,6 +24,8 @@ import {
   sameCategoryName,
 } from '@/lib/categories';
 import { useSession } from '@/store/session';
+import { useT } from '@/hooks/useT';
+import { interpolate } from '@/lib/i18n';
 import type {
   Account,
   Budget,
@@ -75,6 +77,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [budgets, setBudgets] = useState<(Budget & { category_name: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { d } = useT();
 
   /**
    * Kegagalan jaringan sesaat — pindah Wi-Fi, sinyal putus — dulu meninggalkan
@@ -122,7 +125,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       );
       retriedRef.current = false;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal memuat data.');
+      setError(e instanceof Error ? e.message : d.home.loadFailedTitle);
 
       if (!retriedRef.current) {
         retriedRef.current = true;
@@ -132,7 +135,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, d]);
 
   // `refresh` memanggil dirinya sendiri lewat ref supaya tidak perlu masuk
   // ke daftar dependensinya sendiri.
@@ -244,11 +247,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const createCategory = useCallback(
     async (input: NewCategory) => {
-      if (!userId) throw new Error('Belum masuk.');
+      if (!userId) throw new Error(d.common.notSignedIn);
       const name = normalizeCategoryName(input.name);
-      if (!name) throw new Error('Nama kategori tidak boleh kosong.');
+      if (!name) throw new Error(d.categories.nameEmpty);
       if (categories.some((c) => c.kind === input.kind && sameCategoryName(c.name, name))) {
-        throw new Error('Kategori "' + name + '" sudah ada.');
+        throw new Error(interpolate(d.categories.duplicate, { name }));
       }
 
       const { data, error: createError } = await supabase
@@ -268,7 +271,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await refresh();
       return data as Category;
     },
-    [userId, categories, refresh],
+    [userId, categories, refresh, d],
   );
 
   const updateCategory = useCallback(

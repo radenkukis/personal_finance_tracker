@@ -1,7 +1,11 @@
 /**
- * Format angka & tanggal ala Indonesia.
- * Semua fungsi di sini murni (tanpa efek samping) supaya gampang diuji.
+ * Format angka & tanggal.
+ *
+ * Nama hari dan bulan tidak ditanam di sini — datang dari kamus bahasa yang
+ * sedang aktif, karena aplikasi ini dipakai lintas negara. Fungsi tanggal
+ * menerima nama-nama itu sebagai parameter agar tetap murni dan bisa diuji.
  */
+import type { DateNames } from '@/lib/i18n/types';
 
 const RB = 1_000;
 const JT = 1_000_000;
@@ -72,13 +76,6 @@ export function signedRupiah(amount: number, kind: 'income' | 'expense' | 'trans
 // Tanggal
 // ---------------------------------------------------------------------
 
-const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'] as const;
-const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const;
-const BULAN_PANJANG = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-] as const;
-
 /** Tengah malam lokal untuk tanggal tertentu — dasar semua perbandingan hari. */
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -94,23 +91,34 @@ export function daysBetween(a: Date, b: Date): number {
   return Math.round(ms / 86_400_000);
 }
 
-/** "Hari ini" / "Kemarin" / "Sen, 12 Agu" */
-export function relativeDay(d: Date, now: Date = new Date()): string {
+export interface RelativeDayLabels {
+  today: string;
+  yesterday: string;
+  tomorrow: string;
+}
+
+/** "Today" / "Yesterday" / "Mon, 12 Aug" */
+export function relativeDay(
+  d: Date,
+  names: DateNames,
+  labels: RelativeDayLabels,
+  now: Date = new Date(),
+): string {
   const diff = daysBetween(d, now);
-  if (diff === 0) return 'Hari ini';
-  if (diff === 1) return 'Kemarin';
-  if (diff === -1) return 'Besok';
-  return `${HARI[d.getDay()]}, ${d.getDate()} ${BULAN[d.getMonth()]}`;
+  if (diff === 0) return labels.today;
+  if (diff === 1) return labels.yesterday;
+  if (diff === -1) return labels.tomorrow;
+  return `${names.weekdaysShort[d.getDay()]}, ${d.getDate()} ${names.monthsShort[d.getMonth()]}`;
 }
 
-/** "12 Agu 2026" */
-export function shortDate(d: Date): string {
-  return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+/** "12 Aug 2026" */
+export function shortDate(d: Date, names: DateNames): string {
+  return `${d.getDate()} ${names.monthsShort[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** "Agustus 2026" */
-export function monthLabel(d: Date): string {
-  return `${BULAN_PANJANG[d.getMonth()]} ${d.getFullYear()}`;
+/** "August 2026" */
+export function monthLabel(d: Date, names: DateNames): string {
+  return `${names.monthsLong[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** "07:45" */

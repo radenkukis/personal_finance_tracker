@@ -6,6 +6,65 @@
  * tidak perlu tahu provider mana yang sedang aktif.
  */
 
+/**
+ * Siapa yang sedang dilayani: bahasa apa yang dia baca, dan mata uang apa
+ * yang dia pakai. Keduanya diambil dari profil di database, bukan dari badan
+ * permintaan — supaya tidak bisa dipalsukan dari sisi aplikasi.
+ */
+export interface UserVoice {
+  /** Kode bahasa antarmuka, mis. 'ja'. null berarti user belum memilih. */
+  language: string | null;
+  /** Kode mata uang, mis. 'JPY'. */
+  currency: string;
+}
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  id: 'Bahasa Indonesia',
+  'zh-Hans': 'Simplified Chinese (\u7b80\u4f53\u4e2d\u6587)',
+  'zh-Hant': 'Traditional Chinese (\u7e41\u9ad4\u4e2d\u6587)',
+  ja: 'Japanese (\u65e5\u672c\u8a9e)',
+  ko: 'Korean (\ud55c\uad6d\uc5b4)',
+  es: 'Spanish (Espa\u00f1ol)',
+  fr: 'French (Fran\u00e7ais)',
+  de: 'German (Deutsch)',
+};
+
+/**
+ * Mata uang yang nominal sehari-harinya berada di kisaran ribuan ke atas.
+ * Hanya untuk mata uang inilah "makan 35" masuk akal ditafsirkan 35.000 —
+ * menerapkan aturan itu pada dolar atau euro akan mengubah belanja $35
+ * menjadi $35.000.
+ */
+const LARGE_DENOMINATION = new Set([
+  'IDR', 'VND', 'LAK', 'KHR', 'MMK', 'UZS', 'IRR', 'PYG', 'COP', 'CLP', 'KRW', 'LBP', 'SLL',
+]);
+
+export function languageName(code: string | null | undefined): string {
+  if (!code) return LANGUAGE_NAMES.en as string;
+  return LANGUAGE_NAMES[code] ?? code;
+}
+
+/**
+ * Aturan bahasa keluaran. Ditaruh paling atas di setiap prompt karena inilah
+ * yang paling sering salah: model cenderung menjawab dalam bahasa pertanyaan,
+ * padahal yang benar adalah bahasa antarmuka yang dipilih user.
+ */
+export function languageRules(v: UserVoice): string[] {
+  const name = languageName(v.language);
+  return [
+    'BAHASA KELUARAN — ATURAN PALING PENTING:',
+    `- Semua teks yang akan dibaca user HARUS ditulis dalam ${name}.`,
+    '- Berlaku untuk jawaban, penjelasan, isi note, dan nama kategori baru.',
+    `- Kalimat user boleh datang dalam bahasa apa pun. Yang kamu tulis tetap ${name}.`,
+    '- Nama kategori dan nama tempat yang SUDAH ADA di data user disalin persis',
+    '  apa adanya, tidak diterjemahkan — itu data miliknya, bukan teksmu.',
+    `- Nominal ditulis dalam mata uang ${v.currency}, memakai pemisah angka yang`,
+    `  lazim dipakai penutur ${name}.`,
+    '',
+  ];
+}
+
 export interface ParsedTx {
   kind: 'expense' | 'income';
   amount: number;
@@ -38,7 +97,9 @@ export const TRANSACTION_SCHEMA = {
           },
           amount: {
             type: 'number',
-            description: 'Nominal dalam rupiah penuh. "25rb" berarti 25000, "1,5jt" berarti 1500000.',
+            description:
+              'Nominal penuh dalam satuan mata uang user, tanpa singkatan. ' +
+              '"25rb"/"25k" berarti 25000; "1,5jt"/"1.5m" berarti 1500000.',
           },
           merchant: {
             type: ['string', 'null'],
@@ -85,7 +146,7 @@ export const TRANSACTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export interface PromptContext {
+export interface PromptContext extends UserVoice {
   categories: { name: string; kind: string }[];
   accounts: string[];
   /** Koreksi kategori yang pernah dilakukan user — contoh untuk model. */
@@ -115,13 +176,22 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
   const incomeCats = ctx.categories.filter((c) => c.kind === 'income').map((c) => c.name);
 
   const lines = [
-    'Kamu mengubah catatan keuangan berbahasa Indonesia sehari-hari menjadi data transaksi terstruktur.',
+    'Kamu mengubah catatan keuangan sehari-hari menjadi data transaksi terstruktur.',
+    `Catatan user ditulis dalam ${languageName(ctx.language)} atau bahasa apa pun yang dia pakai.`,
     '',
+    ...languageRules(ctx),
     'ATURAN NOMINAL:',
-    '- "rb", "ribu", "k" berarti dikali 1.000. "jt", "juta" berarti dikali 1.000.000.',
-    '- Titik adalah pemisah ribuan (50.000 = lima puluh ribu). Koma adalah desimal (1,5jt = 1.500.000).',
-    '- Angka polos di bawah 1.000 dalam percakapan hampir selalu berarti ribuan: "makan 35" = 35.000.',
-    '  Bila memakai penafsiran ini, turunkan confidence ke 0,6 atau kurang.',
+    '- Singkatan ribuan: "k", "rb", "ribu", "mil", "tsd". Singkatan jutaan: "m", "jt", "juta", "mio".',
+    '- Bahasa Asia Timur memakai satuan sendiri: 1\u4e07 = 10.000, 1\u4e07\uc6d0/1\ub9cc = 10.000.',
+    '- Perhatikan kebiasaan pemisah angka: "50.000" dan "50,000" sama-sama lima puluh ribu.',
+    '  Sebaliknya "1,5" dan "1.5" sama-sama satu setengah.',
+    ...(LARGE_DENOMINATION.has(ctx.currency)
+      ? [
+          '- Angka polos di bawah 1.000 dalam percakapan hampir selalu berarti ribuan:',
+          '  "makan 35" = 35.000. Bila memakai penafsiran ini, turunkan confidence',
+          '  ke 0,6 atau kurang.',
+        ]
+      : []),
     '',
     'ATURAN WAKTU:',
     '- "tadi", "barusan", "hari ini" = hari ini. "kemarin" = kemarin. "kemarin lusa" = dua hari lalu.',
@@ -135,7 +205,8 @@ export function buildParseSystemPrompt(ctx: PromptContext): string {
     '- Bila cocok dengan salah satu kategori di atas, pakai namanya PERSIS dan set category_is_new = false.',
     '- Kamu BOLEH mengusulkan kategori baru, tapi hanya bila pengeluarannya jelas termasuk',
     '  tema yang belum terwakili sama sekali dan kemungkinan akan berulang.',
-    '  Contoh sah: "Hewan Peliharaan", "Olahraga", "Perawatan Diri".',
+    '  Contoh tema yang sah: hewan peliharaan, olahraga, perawatan diri.',
+    `  Tulis namanya dalam ${languageName(ctx.language)}.`,
     '  Saat mengusulkan, set category_is_new = true.',
     '- Nama kategori usulan harus UMUM, bukan nama barang. "Hewan Peliharaan", bukan',
     '  "Makanan Kucing". "Olahraga", bukan "Sewa Lapangan Futsal".',
@@ -252,9 +323,11 @@ export const CHAT_SCHEMA_GEMINI = {
   required: ['type'],
 };
 
-export const CHAT_SYSTEM_PROMPT = [
-  'Kamu asisten keuangan pribadi di dalam aplikasi pencatat pengeluaran, berbahasa Indonesia.',
+export function buildChatSystemPrompt(v: UserVoice): string {
+  return [
+  'Kamu asisten keuangan pribadi di dalam aplikasi pencatat pengeluaran.',
   '',
+  ...languageRules(v),
   'Kamu punya DUA mode. Pilih salah satu untuk setiap pesan:',
   '',
   'MODE "answer" — untuk pertanyaan.',
@@ -282,7 +355,7 @@ export const CHAT_SYSTEM_PROMPT = [
   '- Selalu sebutkan angka nyata dari data yang diberikan. Jangan menjawab dengan nasihat umum.',
   '- Bila data yang dibutuhkan tidak ada, katakan terus terang bahwa datanya belum cukup.',
   '- JANGAN mengarang angka. Semua nominal harus berasal dari ringkasan data yang diberikan.',
-  '- Tulis nominal dalam format rupiah Indonesia, contoh: Rp 1.250.000.',
+  `- Tulis nominal dalam mata uang ${v.currency}.`,
   '- Nada bicara santai tapi tidak menggurui. Jangan menghakimi kebiasaan belanja user.',
   '',
   'BATASAN:',
@@ -290,15 +363,18 @@ export const CHAT_SYSTEM_PROMPT = [
   '- Kamu BUKAN penasihat keuangan berlisensi. Jangan memberi rekomendasi investasi,',
   '  saham, kripto, asuransi, atau pinjaman. Bila ditanya soal itu, katakan dengan sopan',
   '  bahwa itu di luar kemampuanmu dan arahkan kembali ke analisa pengeluaran.',
-].join('\n');
+  ].join('\n');
+}
 
 // ---------------------------------------------------------------------
 // Narasi insight mingguan
 // ---------------------------------------------------------------------
 
-export const INSIGHT_SYSTEM_PROMPT = [
-  'Kamu menulis ringkasan keuangan mingguan berbahasa Indonesia untuk satu orang.',
+export function buildInsightSystemPrompt(v: UserVoice): string {
+  return [
+  'Kamu menulis ringkasan keuangan mingguan untuk satu orang.',
   '',
+  ...languageRules(v),
   'Kamu diberi daftar temuan yang SUDAH dihitung oleh aplikasi. Tugasmu hanya',
   'merangkainya menjadi ringkasan yang enak dibaca — bukan menghitung ulang.',
   '',
@@ -308,5 +384,6 @@ export const INSIGHT_SYSTEM_PROMPT = [
   '- Mulai dari hal yang paling penting.',
   '- Akhiri dengan satu saran konkret yang bisa dikerjakan minggu ini.',
   '- Nada bicara suportif, tidak menghakimi. Hindari kata "boros" yang menyalahkan.',
-  '- Tulis nominal dalam format rupiah Indonesia, contoh: Rp 250.000.',
-].join('\n');
+  `- Tulis nominal dalam mata uang ${v.currency}.`,
+  ].join('\n');
+}

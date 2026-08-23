@@ -11,8 +11,8 @@ import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Button, Card, Divider, Txt, withAlpha } from '@/components/ui';
 import { colors, space } from '@/lib/theme';
-import { relativeDay } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import type { Amendment } from '@/lib/ai';
 import type { TransactionWithRefs } from '@/types/db';
 
@@ -34,6 +34,7 @@ export function AmendmentCard({
   onCancel: () => void;
 }) {
   const { money } = useMoney();
+  const { d, relativeDay } = useT();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,40 +46,39 @@ export function AmendmentCard({
 
     if (amendment.amount !== null && amendment.amount !== Number(transaction.amount)) {
       out.push({
-        label: 'Nominal',
+        label: d.chat.fieldAmount,
         before: money(Number(transaction.amount)),
         after: money(amendment.amount),
       });
     }
     if (amendment.kind !== null && amendment.kind !== transaction.kind) {
       out.push({
-        label: 'Jenis',
-        before: transaction.kind === 'income' ? 'Masuk' : 'Keluar',
-        after: amendment.kind === 'income' ? 'Masuk' : 'Keluar',
+        label: d.chat.fieldKind,
+        before: transaction.kind === 'income' ? d.common.income : d.common.expense,
+        after: amendment.kind === 'income' ? d.common.income : d.common.expense,
       });
     }
     if (amendment.category_name !== null && amendment.category_name !== transaction.category?.name) {
       out.push({
-        label: 'Kategori',
+        label: d.chat.fieldCategory,
         before: transaction.category?.name ?? dash,
         after: amendment.category_name,
       });
     }
     if (amendment.merchant !== null && amendment.merchant !== transaction.merchant) {
-      out.push({ label: 'Tempat', before: transaction.merchant ?? dash, after: amendment.merchant });
+      out.push({ label: d.chat.fieldMerchant, before: transaction.merchant ?? dash, after: amendment.merchant });
     }
     if (amendment.note !== null && amendment.note !== transaction.note) {
-      out.push({ label: 'Catatan', before: transaction.note ?? dash, after: amendment.note });
+      out.push({ label: d.chat.fieldNote, before: transaction.note ?? dash, after: amendment.note });
     }
     return out;
-  }, [amendment, transaction, money]);
+  }, [amendment, transaction, money, d]);
 
   if (!transaction) {
     return (
       <Card style={{ borderColor: withAlpha(colors.warning, 0.5) }}>
         <Txt variant="caption" color={colors.warning}>
-          Transaksi yang dimaksud tidak ditemukan. Mungkin sudah dihapus, atau
-          terlalu lama sehingga belum termuat.
+          {d.chat.amendmentMissing}
         </Txt>
       </Card>
     );
@@ -90,7 +90,7 @@ export function AmendmentCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
           <Feather name="check-circle" size={15} color={colors.accent} />
           <Txt variant="caption" color={colors.accent}>
-            Perubahan tersimpan.
+            {d.chat.amendmentSaved}
           </Txt>
         </View>
       </Card>
@@ -101,7 +101,7 @@ export function AmendmentCard({
     return (
       <Card>
         <Txt variant="caption" color={colors.textMuted}>
-          Tidak ada yang perlu diubah — nilainya sudah seperti itu.
+          {d.chat.amendmentNothing}
         </Txt>
       </Card>
     );
@@ -112,7 +112,7 @@ export function AmendmentCard({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
         <Feather name="edit-2" size={14} color={colors.accent} />
         <Txt variant="bodyStrong" color={colors.accent}>
-          Usulan perubahan
+          {d.chat.amendmentTitle}
         </Txt>
       </View>
 
@@ -163,9 +163,9 @@ export function AmendmentCard({
       ) : null}
 
       <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
-        <Button title="Batal" variant="secondary" onPress={onCancel} />
+        <Button title={d.common.cancel} variant="secondary" onPress={onCancel} />
         <Button
-          title="Konfirmasi"
+          title={d.common.confirm}
           icon="check"
           loading={busy}
           style={{ flex: 1 }}
@@ -176,7 +176,7 @@ export function AmendmentCard({
               await onConfirm();
               setDone(true);
             } catch (e) {
-              setError(e instanceof Error ? e.message : 'Gagal menyimpan perubahan.');
+              setError(e instanceof Error ? e.message : d.settings.saveFailed);
             } finally {
               setBusy(false);
             }

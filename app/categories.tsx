@@ -16,6 +16,8 @@ import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha }
 import { colors, radius, size, space } from '@/lib/theme';
 import { CATEGORY_COLORS } from '@/lib/categories';
 import { useData } from '@/store/data';
+import { useT } from '@/hooks/useT';
+import type { Dictionary } from '@/lib/i18n';
 import type { Category, TxKind } from '@/types/db';
 
 export default function KategoriScreen() {
@@ -23,6 +25,7 @@ export default function KategoriScreen() {
   const router = useRouter();
   const { categories, createCategory, updateCategory, deleteCategory, countTransactionsIn } =
     useData();
+  const { d, fill } = useT();
 
   const [editing, setEditing] = useState<Category | null>(null);
   const [creatingKind, setCreatingKind] = useState<TxKind | null>(null);
@@ -40,35 +43,34 @@ export default function KategoriScreen() {
     (category: Category) => {
       const used = countTransactionsIn(category.id);
       Alert.alert(
-        `Hapus kategori "${category.name}"?`,
+        fill(d.categories.deleteTitle, { name: category.name }),
         used > 0
-          ? `${used} transaksi memakai kategori ini. Transaksinya TIDAK ikut terhapus — ` +
-            'hanya kehilangan label kategorinya, dan bisa kamu isi ulang nanti.'
-          : 'Belum ada transaksi yang memakai kategori ini.',
+          ? fill(d.categories.deleteBodyUsed, { count: used })
+          : d.categories.deleteBodyUnused,
         [
-          { text: 'Batal', style: 'cancel' },
+          { text: d.common.cancel, style: 'cancel' },
           {
-            text: 'Hapus',
+            text: d.common.delete,
             style: 'destructive',
             onPress: async () => {
               try {
                 await deleteCategory(category.id);
               } catch (e) {
-                setError(e instanceof Error ? e.message : 'Gagal menghapus.');
+                setError(e instanceof Error ? e.message : d.settings.saveFailed);
               }
             },
           },
         ],
       );
     },
-    [countTransactionsIn, deleteCategory],
+    [countTransactionsIn, deleteCategory, d, fill],
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Txt variant="title">Kategori</Txt>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Tutup">
+        <Txt variant="title">{d.categories.title}</Txt>
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel={d.common.close}>
           <Feather name="x" size={20} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -89,12 +91,13 @@ export default function KategoriScreen() {
         ) : null}
 
         <Txt variant="caption" color={colors.textMuted} style={{ lineHeight: 18 }}>
-          Kata kunci menentukan apa yang bisa dikenali tanpa AI. Makin cocok
-          dengan caramu menulis, makin sering catatanmu diurai seketika dan gratis.
+          {d.categories.intro}
         </Txt>
 
         <CategoryGroup
-          title="Pengeluaran"
+          title={d.categories.expenses}
+          d={d}
+          fill={fill}
           items={groups.expense}
           onEdit={setEditing}
           onDelete={confirmDelete}
@@ -103,7 +106,9 @@ export default function KategoriScreen() {
         />
 
         <CategoryGroup
-          title="Pemasukan"
+          title={d.categories.incomes}
+          d={d}
+          fill={fill}
           items={groups.income}
           onEdit={setEditing}
           onDelete={confirmDelete}
@@ -156,6 +161,8 @@ function CategoryGroup({
   onDelete,
   onAdd,
   usageOf,
+  d,
+  fill,
 }: {
   title: string;
   items: readonly Category[];
@@ -163,6 +170,8 @@ function CategoryGroup({
   onDelete: (c: Category) => void;
   onAdd: () => void;
   usageOf: (id: string) => number;
+  d: Dictionary;
+  fill: (template: string, vars?: Record<string, string | number>) => string;
 }) {
   return (
     <View>
@@ -183,7 +192,7 @@ function CategoryGroup({
             <Pressable
               onPress={() => onEdit(c)}
               onLongPress={() => onDelete(c)}
-              accessibilityLabel={`Sunting kategori ${c.name}`}
+              accessibilityLabel={c.name}
               style={({ pressed }) => [
                 styles.row,
                 pressed && { backgroundColor: colors.surfacePressed },
@@ -196,8 +205,11 @@ function CategoryGroup({
                 </Txt>
                 <Txt variant="caption" color={colors.textFaint} numberOfLines={1}>
                   {c.keywords.length > 0
-                    ? `${c.keywords.length} kata kunci · ${usageOf(c.id)} transaksi`
-                    : `Tanpa kata kunci · ${usageOf(c.id)} transaksi`}
+                    ? fill(d.categories.keywordCount, {
+                        count: c.keywords.length,
+                        transactions: usageOf(c.id),
+                      })
+                    : fill(d.categories.noKeywords, { transactions: usageOf(c.id) })}
                 </Txt>
               </View>
               <Feather name="chevron-right" size={16} color={colors.textFaint} />
@@ -208,7 +220,7 @@ function CategoryGroup({
         {items.length > 0 ? <Divider /> : null}
         <Pressable
           onPress={onAdd}
-          accessibilityLabel={`Tambah kategori ${title.toLowerCase()}`}
+          accessibilityLabel={`${d.categories.addCategory} · ${title}`}
           style={({ pressed }) => [
             styles.row,
             pressed && { backgroundColor: colors.surfacePressed },
@@ -216,13 +228,13 @@ function CategoryGroup({
         >
           <IconBadge name="plus" color={colors.accent} diameter={28} />
           <Txt variant="bodyStrong" color={colors.accent} style={{ flex: 1 }}>
-            Tambah kategori
+            {d.categories.addCategory}
           </Txt>
         </Pressable>
       </Card>
 
       <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm }}>
-        Ketuk untuk menyunting — tombol hapus ada di dalamnya
+        {d.categories.listHint}
       </Txt>
     </View>
   );
@@ -243,6 +255,7 @@ function CategoryEditor({
   onDelete?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { d } = useT();
   const [name, setName] = useState(initial.name);
   const [color, setColor] = useState(initial.color);
   const [keywords, setKeywords] = useState<string[]>([...initial.keywords]);
@@ -259,7 +272,7 @@ function CategoryEditor({
 
   return (
     <View style={StyleSheetAbsoluteFill}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Tutup" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={d.common.close} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -269,22 +282,22 @@ function CategoryEditor({
           <View style={styles.grabber} />
 
           <Field
-            label="Nama kategori"
+            label={d.categories.nameLabel}
             value={name}
             onChangeText={setName}
-            placeholder="mis. Hewan Peliharaan"
+            placeholder={d.categories.namePlaceholder}
             autoFocus={!initial.name}
           />
 
           <Txt variant="overline" color={colors.textFaint} style={{ marginTop: space.lg }}>
-            Warna
+            {d.categories.colorLabel}
           </Txt>
           <View style={styles.colorRow}>
             {CATEGORY_COLORS.map((c) => (
               <Pressable
                 key={c}
                 onPress={() => setColor(c)}
-                accessibilityLabel={`Warna ${c}`}
+                accessibilityLabel={`${d.categories.colorLabel} ${c}`}
                 accessibilityState={{ selected: c === color }}
                 style={[
                   styles.colorDot,
@@ -296,10 +309,10 @@ function CategoryEditor({
           </View>
 
           <Txt variant="overline" color={colors.textFaint} style={{ marginTop: space.lg }}>
-            Kata kunci
+            {d.categories.keywordsLabel}
           </Txt>
           <Txt variant="caption" color={colors.textFaint} style={{ marginBottom: space.sm }}>
-            Kata yang biasa kamu tulis untuk pengeluaran ini.
+            {d.categories.keywordsHint}
           </Txt>
 
           <View style={styles.keywordBox}>
@@ -307,7 +320,7 @@ function CategoryEditor({
               <Pressable
                 key={k}
                 onPress={() => setKeywords((prev) => prev.filter((x) => x !== k))}
-                accessibilityLabel={`Hapus kata kunci ${k}`}
+                accessibilityLabel={`${d.common.delete} ${k}`}
                 style={[styles.keywordChip, { backgroundColor: withAlpha(color, 0.16) }]}
               >
                 <Txt variant="caption" color={color}>
@@ -318,7 +331,7 @@ function CategoryEditor({
             ))}
             {keywords.length === 0 ? (
               <Txt variant="caption" color={colors.textFaint}>
-                Belum ada. Tanpa kata kunci, kategori ini hanya bisa dikenali AI.
+                {d.categories.noKeywordsYet}
               </Txt>
             ) : null}
           </View>
@@ -329,14 +342,14 @@ function CategoryEditor({
                 icon="hash"
                 value={draftKeyword}
                 onChangeText={setDraftKeyword}
-                placeholder="tambah kata kunci…"
+                placeholder={d.categories.keywordPlaceholder}
                 autoCapitalize="none"
                 onSubmitEditing={addKeyword}
                 returnKeyType="done"
               />
             </View>
             <Button
-              title="Tambah"
+              title={d.common.add}
               variant="secondary"
               onPress={addKeyword}
               disabled={!draftKeyword.trim()}
@@ -355,7 +368,7 @@ function CategoryEditor({
                 <Divider />
               </View>
               <Button
-                title="Hapus kategori ini"
+                title={d.categories.deleteThis}
                 variant="danger"
                 icon="trash-2"
                 full
@@ -366,9 +379,9 @@ function CategoryEditor({
           ) : null}
 
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
-            <Button title="Batal" variant="secondary" onPress={onClose} />
+            <Button title={d.common.cancel} variant="secondary" onPress={onClose} />
             <Button
-              title="Simpan"
+              title={d.common.save}
               icon="check"
               loading={busy}
               disabled={!name.trim()}
@@ -379,7 +392,7 @@ function CategoryEditor({
                 try {
                   await onSave({ name, color, keywords });
                 } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
+                  setError(e instanceof Error ? e.message : d.settings.saveFailed);
                 } finally {
                   setBusy(false);
                 }

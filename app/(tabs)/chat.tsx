@@ -16,6 +16,7 @@ import { aiMode, askQuestion, type Amendment } from '@/lib/ai';
 import { AmendmentCard } from '@/components/AmendmentCard';
 import { useData } from '@/store/data';
 import { sameCategoryName } from '@/lib/categories';
+import { useT } from '@/hooks/useT';
 
 interface Turn {
   role: 'user' | 'assistant';
@@ -27,17 +28,11 @@ interface Turn {
   amendment?: Amendment;
 }
 
-const SARAN = [
-  'Aku boros di mana bulan ini?',
-  'Bandingkan pengeluaranku bulan ini dengan bulan lalu',
-  'Kategori apa yang paling naik?',
-  'Ubah transaksi terakhir jadi 30rb',
-];
-
 export default function TanyaScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const { transactions, categories, updateTransaction } = useData();
+  const { d } = useT();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
@@ -45,6 +40,13 @@ export default function TanyaScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const available = aiMode() === 'remote';
+
+  const suggestions = [
+    d.chat.suggestion1,
+    d.chat.suggestion2,
+    d.chat.suggestion3,
+    d.chat.suggestion4,
+  ];
 
   const send = useCallback(
     async (question: string) => {
@@ -76,20 +78,20 @@ export default function TanyaScreen() {
           },
         ]);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Gagal menghubungi AI.');
+        setError(e instanceof Error ? e.message : d.chat.failed);
       } finally {
         setBusy(false);
         requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
       }
     },
-    [busy, turns],
+    [busy, turns, d],
   );
 
   /** Menerapkan usulan setelah user menekan Konfirmasi di kartu. */
   const applyAmendment = useCallback(
     async (a: Amendment) => {
       const target = transactions.find((t) => t.id === a.transaction_id);
-      if (!target) throw new Error('Transaksinya sudah tidak ada.');
+      if (!target) throw new Error(d.chat.amendmentMissing);
 
       const patch: Record<string, unknown> = { was_corrected: true };
       if (a.amount !== null) patch.amount = a.amount;
@@ -109,7 +111,7 @@ export default function TanyaScreen() {
 
       await updateTransaction(a.transaction_id, patch);
     },
-    [transactions, categories, updateTransaction],
+    [transactions, categories, updateTransaction, d],
   );
 
   if (!available) {
@@ -117,8 +119,8 @@ export default function TanyaScreen() {
       <View style={{ flex: 1, paddingTop: insets.top + space.lg, justifyContent: 'center', padding: space.lg }}>
         <EmptyState
           icon="message-circle"
-          title="Chat butuh AI diaktifkan"
-          body="Fitur tanya-jawab memakai model bahasa, jadi tidak bisa jalan di mode gratis penuh. Aktifkan lewat tab Atur — ada panduan langkah demi langkah, termasuk opsi gratis."
+          title={d.chat.unavailableTitle}
+          body={d.chat.unavailableBody}
         />
       </View>
     );
@@ -131,9 +133,9 @@ export default function TanyaScreen() {
       keyboardVerticalOffset={size.tabBarHeight}
     >
       <View style={{ paddingTop: insets.top + space.md, paddingHorizontal: space.lg }}>
-        <Txt variant="title">Tanya</Txt>
+        <Txt variant="title">{d.chat.title}</Txt>
         <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
-          Dijawab pakai data transaksi kamu sendiri
+          {d.chat.subtitle}
         </Txt>
       </View>
 
@@ -151,11 +153,11 @@ export default function TanyaScreen() {
           <View style={{ flex: 1, justifyContent: 'center', gap: space.lg }}>
             <EmptyState
               icon="message-circle"
-              title="Tanya apa saja soal uangmu"
-              body="Jawabannya memakai angka nyata dari transaksi yang sudah kamu catat, bukan saran umum."
+              title={d.chat.emptyTitle}
+              body={d.chat.emptyBody}
             />
             <View style={{ gap: 6 }}>
-              {SARAN.map((s) => (
+              {suggestions.map((s) => (
                 <Pressable key={s} onPress={() => void send(s)} style={styles.suggestion}>
                   <Txt variant="caption" color={colors.textMuted} style={{ flex: 1 }}>
                     {s}
@@ -176,7 +178,7 @@ export default function TanyaScreen() {
                 onCancel={() =>
                   setTurns((prev) =>
                     prev.map((t, idx) =>
-                      idx === i ? { role: t.role, content: 'Baik, tidak jadi diubah.' } : t,
+                      idx === i ? { role: t.role, content: d.chat.amendmentCancelled } : t,
                     ),
                   )
                 }
@@ -191,7 +193,7 @@ export default function TanyaScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
             <ActivityIndicator size="small" color={colors.textFaint} />
             <Txt variant="caption" color={colors.textFaint}>
-              Menghitung dari datamu…
+              {d.chat.thinking}
             </Txt>
           </View>
         ) : null}
@@ -209,17 +211,17 @@ export default function TanyaScreen() {
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder="Tulis pertanyaan…"
+          placeholder={d.chat.placeholder}
           placeholderTextColor={colors.textFaint}
           style={[type.body, styles.composerInput]}
           multiline
           onSubmitEditing={() => void send(draft)}
-          accessibilityLabel="Pertanyaan"
+          accessibilityLabel={d.chat.placeholder}
         />
         <Pressable
           onPress={() => void send(draft)}
           disabled={!draft.trim() || busy}
-          accessibilityLabel="Kirim pertanyaan"
+          accessibilityLabel={d.chat.send}
           style={[styles.sendButton, (!draft.trim() || busy) && { opacity: 0.4 }]}
         >
           <Feather name="arrow-up" size={18} color="#04140F" />

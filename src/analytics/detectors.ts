@@ -9,18 +9,32 @@
  */
 import { daysBetween, dayKey, rupiah, rupiahCompact, startOfDay } from '@/lib/format';
 import { median, stdev, sum } from './projection';
+import { en, interpolate, type Dictionary } from '@/lib/i18n';
 
 /**
- * Pemformat nominal disuntikkan dari luar, bukan dipanggil langsung, supaya
- * teks temuan mengikuti mata uang pilihan user. Nilai bawaannya Rupiah agar
- * pemanggil lama (dan unit test) tetap jalan tanpa perubahan.
+ * Cara temuan dikalimatkan disuntikkan dari luar, bukan ditulis di dalam
+ * detektor. Dua alasan, dan keduanya penting:
+ *
+ *   - nominalnya harus ikut mata uang pilihan user;
+ *   - kalimatnya harus ikut bahasa pilihan user.
+ *
+ * Yang dihitung detektor tetap sama untuk siapa pun; hanya bungkus katanya
+ * yang berbeda. Nilai bawaan disediakan supaya unit test bisa memanggil
+ * detektor tanpa menyiapkan apa pun.
  */
 export interface MoneyFormat {
   money: (amount: number) => string;
   compact: (amount: number) => string;
+  /** Pola kalimat temuan, biasanya `dictionary.findings`. */
+  text?: Dictionary['findings'];
 }
 
 const RUPIAH: MoneyFormat = { money: rupiah, compact: rupiahCompact };
+
+/** Pola kalimat yang berlaku, dengan cadangan bahasa Inggris. */
+function phrases(fmt: MoneyFormat): Dictionary['findings'] {
+  return fmt.text ?? en.findings;
+}
 
 export interface TxPoint {
   id: string;
@@ -119,15 +133,17 @@ export function recurringFindings(
 ): Finding[] {
   if (list.length === 0) return [];
 
+  const t = phrases(fmt);
   const monthlyTotal = sum(list.map((r) => r.typicalAmount));
   return [
     {
       kind: 'recurring',
       severity: 'info',
-      title: `${list.length} langganan rutin terdeteksi`,
-      detail:
-        `Total ${fmt.money(monthlyTotal)} per bulan keluar otomatis: ` +
-        list.map((r) => `${r.merchant} (tgl ${r.dayOfMonth})`).join(', ') + '.',
+      title: interpolate(t.recurringTitle, { count: list.length }),
+      detail: interpolate(t.recurringDetail, {
+        amount: fmt.money(monthlyTotal),
+        list: list.map((r) => `${r.merchant} (${r.dayOfMonth})`).join(', '),
+      }),
       data: {
         jumlah: list.length,
         total_bulanan: Math.round(monthlyTotal),
@@ -179,8 +195,11 @@ export function detectSpike(
     {
       kind: 'spike',
       severity: 'warning',
-      title: `Hari ini ${times.toFixed(1)}x lebih boros dari biasanya`,
-      detail: `Keluar ${fmt.money(todayTotal)} hari ini, sementara rata-rata harianmu ${fmt.compact(mean)}.`,
+      title: interpolate(phrases(fmt).spikeTitle, { times: times.toFixed(1) }),
+      detail: interpolate(phrases(fmt).spikeDetail, {
+        amount: fmt.money(todayTotal),
+        average: fmt.compact(mean),
+      }),
       data: {
         hari_ini: Math.round(todayTotal),
         rata_rata_harian: Math.round(mean),
@@ -235,8 +254,11 @@ export function detectCategorySurge(
     out.push({
       kind: 'category_surge',
       severity: pct >= 100 ? 'danger' : 'warning',
-      title: `${category} naik ${Math.round(pct)}% minggu ini`,
-      detail: `Minggu ini ${fmt.money(now7)}, biasanya sekitar ${fmt.compact(priorWeekly)} per minggu.`,
+      title: interpolate(phrases(fmt).surgeTitle, { category, percent: Math.round(pct) }),
+      detail: interpolate(phrases(fmt).surgeDetail, {
+        amount: fmt.money(now7),
+        average: fmt.compact(priorWeekly),
+      }),
       data: {
         kategori: category,
         minggu_ini: Math.round(now7),
@@ -287,6 +309,7 @@ export function budgetFindings(
   statuses: readonly BudgetStatus[],
   fmt: MoneyFormat = RUPIAH,
 ): Finding[] {
+  const t = phrases(fmt);
   const out: Finding[] = [];
 
   for (const s of statuses) {
@@ -296,8 +319,11 @@ export function budgetFindings(
       out.push({
         kind: 'budget_over',
         severity: 'danger',
-        title: `Budget ${s.categoryName} sudah jebol`,
-        detail: `Terpakai ${fmt.money(s.spent)} dari budget ${fmt.money(s.budget)}.`,
+        title: interpolate(t.budgetOverTitle, { category: s.categoryName }),
+        detail: interpolate(t.budgetOverDetail, {
+          spent: fmt.money(s.spent),
+          budget: fmt.money(s.budget),
+        }),
         data: {
           kategori: s.categoryName,
           budget: Math.round(s.budget),
@@ -309,10 +335,12 @@ export function budgetFindings(
       out.push({
         kind: 'budget_risk',
         severity: 'warning',
-        title: `${s.categoryName} diperkirakan lewat budget`,
-        detail:
-          `Baru ${fmt.money(s.spent)} dari ${fmt.money(s.budget)}, tapi dengan laju sekarang ` +
-          `akhir bulan bisa menyentuh ${fmt.compact(s.projected)}.`,
+        title: interpolate(t.budgetRiskTitle, { category: s.categoryName }),
+        detail: interpolate(t.budgetRiskDetail, {
+          spent: fmt.money(s.spent),
+          budget: fmt.money(s.budget),
+          projected: fmt.compact(s.projected),
+        }),
         data: {
           kategori: s.categoryName,
           budget: Math.round(s.budget),

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Profile } from '@/types/db';
+import type { Dictionary } from '@/lib/i18n';
 
 interface SessionState {
   session: Session | null;
@@ -58,14 +59,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           email: email.trim(),
           password,
         });
-        if (error) throw new Error(translateAuthError(error.message));
+        if (error) throw new Error(authErrorCode(error.message));
       },
       signUp: async (email, password) => {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         });
-        if (error) throw new Error(translateAuthError(error.message));
+        if (error) throw new Error(authErrorCode(error.message));
         // Kalau konfirmasi email diaktifkan, session belum terbit.
         return { needsConfirmation: data.session === null };
       },
@@ -101,14 +102,37 @@ async function loadProfile(userId: string): Promise<Profile | null> {
   return data;
 }
 
-/** Pesan error Supabase berbahasa Inggris → penjelasan yang bisa ditindaklanjuti. */
-function translateAuthError(message: string): string {
+/**
+ * Pesan Supabase yang berbahasa Inggris dan penuh istilah diringkas menjadi
+ * kode singkat. Kodenya diterjemahkan belakangan, di tempat yang tahu bahasa
+ * apa yang sedang dipakai — modul ini berjalan sebelum profil user ada.
+ *
+ * Pesan yang tidak dikenali diteruskan apa adanya: lebih baik user melihat
+ * kalimat Inggris yang bisa dicari di internet daripada "terjadi kesalahan"
+ * yang tidak memberi petunjuk apa pun.
+ */
+const AUTH_CODES = [
+  ['invalid login credentials', 'wrongCredentials'],
+  ['email not confirmed', 'emailNotConfirmed'],
+  ['user already registered', 'alreadyRegistered'],
+  ['password should be at least', 'shortPassword'],
+  ['unable to validate email', 'invalidEmail'],
+  ['network', 'networkError'],
+] as const;
+
+type AuthErrorCode = (typeof AUTH_CODES)[number][1];
+
+function authErrorCode(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login credentials')) return 'Email atau kata sandi salah.';
-  if (m.includes('email not confirmed')) return 'Email belum dikonfirmasi. Cek kotak masuk kamu.';
-  if (m.includes('user already registered')) return 'Email ini sudah terdaftar. Coba masuk saja.';
-  if (m.includes('password should be at least')) return 'Kata sandi minimal 6 karakter.';
-  if (m.includes('unable to validate email')) return 'Format email tidak valid.';
-  if (m.includes('network')) return 'Tidak bisa terhubung. Cek koneksi internet kamu.';
+  for (const [needle, code] of AUTH_CODES) {
+    if (m.includes(needle)) return code;
+  }
   return message;
+}
+
+/** Kode galat → kalimat dalam bahasa yang sedang dipakai. */
+export function authErrorMessage(error: unknown, d: Dictionary): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const known = AUTH_CODES.some(([, code]) => code === raw);
+  return known ? d.auth[raw as AuthErrorCode] : raw;
 }

@@ -4,13 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Field, Txt } from '@/components/ui';
 import { colors, space } from '@/lib/theme';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { useSession } from '@/store/session';
+import { authErrorMessage, useSession } from '@/store/session';
+import { useT } from '@/hooks/useT';
 
 type Mode = 'signin' | 'signup';
 
 export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const { signIn, signUp } = useSession();
+  const { d } = useT();
 
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
@@ -23,8 +25,8 @@ export default function SignInScreen() {
     setError(null);
     setNotice(null);
 
-    if (!email.includes('@')) return setError('Masukkan alamat email yang valid.');
-    if (password.length < 6) return setError('Kata sandi minimal 6 karakter.');
+    if (!email.includes('@')) return setError(d.auth.invalidEmail);
+    if (password.length < 6) return setError(d.auth.shortPassword);
 
     setBusy(true);
     try {
@@ -33,12 +35,12 @@ export default function SignInScreen() {
       } else {
         const { needsConfirmation } = await signUp(email, password);
         if (needsConfirmation) {
-          setNotice('Akun dibuat. Cek email kamu untuk konfirmasi, lalu masuk.');
+          setNotice(d.auth.checkInbox);
           setMode('signin');
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Terjadi kesalahan. Coba lagi.');
+      setError(authErrorMessage(e, d));
     } finally {
       setBusy(false);
     }
@@ -63,28 +65,28 @@ export default function SignInScreen() {
         <View style={{ marginBottom: space.xxl }}>
           <Txt variant="display">Arta</Txt>
           <Txt variant="body" color={colors.textMuted} style={{ marginTop: space.xs }}>
-            Catat pengeluaran dengan mengetik kalimat biasa. Sisanya biar app yang rapikan.
+            {d.auth.tagline}
           </Txt>
         </View>
 
         <View style={{ gap: space.md }}>
           <Field
-            label="Email"
+            label={d.auth.email}
             icon="mail"
             value={email}
             onChangeText={setEmail}
-            placeholder="kamu@email.com"
+            placeholder={d.auth.emailHint}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
             inputMode="email"
           />
           <Field
-            label="Kata sandi"
+            label={d.auth.password}
             icon="lock"
             value={password}
             onChangeText={setPassword}
-            placeholder="minimal 6 karakter"
+            placeholder={d.auth.passwordHint}
             secureTextEntry
             autoCapitalize="none"
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
@@ -104,14 +106,14 @@ export default function SignInScreen() {
           ) : null}
 
           <Button
-            title={mode === 'signin' ? 'Masuk' : 'Buat akun'}
+            title={mode === 'signin' ? d.auth.signIn : d.auth.signUp}
             onPress={submit}
             loading={busy}
             full
             style={{ marginTop: space.xs }}
           />
           <Button
-            title={mode === 'signin' ? 'Belum punya akun? Daftar' : 'Sudah punya akun? Masuk'}
+            title={mode === 'signin' ? d.auth.toSignUp : d.auth.toSignIn}
             variant="ghost"
             onPress={() => {
               setMode(mode === 'signin' ? 'signup' : 'signin');
@@ -130,13 +132,14 @@ export default function SignInScreen() {
  * kesalahan paling sering terjadi ketika orang pertama kali menjalankan proyek.
  */
 function NotConfigured() {
+  const { d } = useT();
+
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: space.lg }}>
       <Card>
-        <Txt variant="title">Supabase belum dikonfigurasi</Txt>
+        <Txt variant="title">{d.auth.notConfiguredTitle}</Txt>
         <Txt variant="body" color={colors.textMuted} style={{ marginTop: space.sm }}>
-          Buat file <Txt variant="bodyStrong">.env</Txt> di folder proyek (salin dari{' '}
-          <Txt variant="bodyStrong">.env.example</Txt>), lalu isi:
+          {d.auth.notConfiguredBody}
         </Txt>
         <View
           style={{
@@ -155,8 +158,7 @@ function NotConfigured() {
           </Txt>
         </View>
         <Txt variant="caption" color={colors.textMuted} style={{ marginTop: space.md }}>
-          Nilainya ada di Supabase Dashboard → Project Settings → Data API. Setelah diisi,
-          hentikan server lalu jalankan ulang `npx expo start -c`.
+          {d.auth.notConfiguredHint}
         </Txt>
       </Card>
     </View>

@@ -28,9 +28,9 @@ import { DraftReviewSheet } from '@/components/DraftReviewSheet';
 import { colors, radius, size, space, type } from '@/lib/theme';
 import { aiMode, smartParse, transcribeAudio } from '@/lib/ai';
 import { useData } from '@/store/data';
+import { useT } from '@/hooks/useT';
+import { useMoney } from '@/hooks/useMoney';
 import type { DraftTransaction } from '@/types/db';
-
-const CONTOH = ['kopi 25rb', 'bensin 50k gopay', 'kemarin makan di padang 45rb', 'gajian 8jt'];
 
 /**
  * Preset bawaan HIGH_QUALITY merekam 44,1 kHz stereo 128 kbps — kualitas musik
@@ -85,6 +85,8 @@ export default function AddScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { categories, accounts, saveDrafts, recordCorrection } = useData();
+  const { d, fill } = useT();
+  const { money } = useMoney();
 
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState<DraftTransaction[] | null>(null);
@@ -117,21 +119,21 @@ export default function AddScreen() {
       setError(null);
       setStatus(null);
       try {
-        const outcome = await smartParse(trimmed, categories, accounts, source);
+        const outcome = await smartParse(trimmed, categories, accounts, source, d);
         if (outcome.drafts.length === 0) {
-          setError(outcome.warning ?? 'Belum ada transaksi yang bisa dibaca dari kalimat itu.');
+          setError(outcome.warning ?? d.add.nothingParsed);
           return;
         }
         setDrafts(outcome.drafts);
         setUsedAI(outcome.usedAI);
         setStatus(outcome.warning);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Gagal mengurai kalimat.');
+        setError(e instanceof Error ? e.message : d.add.parseFailed);
       } finally {
         setBusy(false);
       }
     },
-    [categories, accounts],
+    [categories, accounts, d],
   );
 
   // -------------------------------------------------------------------
@@ -143,36 +145,36 @@ export default function AddScreen() {
 
     if (isRecording) {
       setBusy(true);
-      setStatus('Menyimpan rekaman…');
+      setStatus(d.voice.savingRecording);
       try {
         await recorder.stop();
 
         // `recorder.uri` kadang belum terisi tepat setelah stop; status
         // perekam menyimpan lokasinya juga, jadi dipakai sebagai cadangan.
         const uri = recorder.uri ?? recState.url;
-        if (!uri) throw new Error('Rekaman tidak tersimpan. Coba rekam ulang.');
+        if (!uri) throw new Error(d.voice.notSaved);
 
         if (recState.durationMillis > 0 && recState.durationMillis < 700) {
-          throw new Error('Rekamannya terlalu pendek. Tahan sebentar sambil bicara.');
+          throw new Error(d.voice.tooShort);
         }
 
         const base64 = await new File(uri).base64();
 
-        setStatus('Mengubah suara jadi teks…');
+        setStatus(d.voice.transcribing);
         const spoken = await transcribeAudio(base64, 'audio/m4a');
 
         if (!spoken.trim()) {
-          throw new Error('Suaranya tidak tertangkap. Coba bicara lebih dekat ke mikrofon.');
+          throw new Error(d.voice.notHeard);
         }
 
         // Teksnya ditampilkan lebih dulu supaya user melihat hasilnya benar
         // sebelum tahap berikutnya selesai — bukan menatap "loading" buta.
         setText(spoken);
-        setStatus('Mengurai transaksinya…');
+        setStatus(d.voice.parsing);
         await runParse(spoken, 'ai_voice');
       } catch (e) {
         setStatus(null);
-        setError(e instanceof Error ? e.message : 'Gagal memproses rekaman.');
+        setError(e instanceof Error ? e.message : d.voice.failed);
       } finally {
         setBusy(false);
       }
@@ -185,7 +187,7 @@ export default function AddScreen() {
 
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
-      setError('Izin mikrofon ditolak. Aktifkan lewat pengaturan HP untuk memakai input suara.');
+      setError(d.voice.permissionDenied);
       return;
     }
 
@@ -197,12 +199,10 @@ export default function AddScreen() {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {
       setError(
-        e instanceof Error
-          ? `Mikrofon tidak bisa dipakai: ${e.message}`
-          : 'Mikrofon tidak bisa dipakai.',
+        e instanceof Error ? `${d.voice.micUnavailable} ${e.message}` : d.voice.micUnavailable,
       );
     }
-  }, [recorder, recState, isRecording, runParse]);
+  }, [recorder, recState, isRecording, runParse, d]);
 
   // -------------------------------------------------------------------
   // Simpan
@@ -224,13 +224,13 @@ export default function AddScreen() {
       const count = await saveDrafts(drafts);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
-      if (count === 0) setError('Tidak ada yang tersimpan.');
+      if (count === 0) setError(d.add.nothingSaved);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
+      setError(e instanceof Error ? e.message : d.add.saveFailed);
     } finally {
       setBusy(false);
     }
-  }, [drafts, saveDrafts, recordCorrection, router]);
+  }, [drafts, saveDrafts, recordCorrection, router, d]);
 
   // -------------------------------------------------------------------
 
@@ -245,8 +245,8 @@ export default function AddScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Txt variant="title">{drafts ? 'Periksa dulu' : 'Catat transaksi'}</Txt>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Tutup">
+        <Txt variant="title">{drafts ? d.add.reviewTitle : d.add.title}</Txt>
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel={d.common.close}>
           <Feather name="x" size={20} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -260,12 +260,14 @@ export default function AddScreen() {
             <View style={styles.badgeRow}>
               <Badge
                 icon={manualEntry ? 'edit-3' : usedAI ? 'cpu' : 'zap'}
-                label={manualEntry ? 'Isi manual' : usedAI ? 'Diurai AI' : 'Diurai di HP · gratis'}
+                label={
+                  manualEntry ? d.add.manualBadge : usedAI ? d.add.parsedByAI : d.add.parsedOnDevice
+                }
                 color={manualEntry ? colors.textMuted : usedAI ? colors.info : colors.accent}
               />
               <Badge
                 icon="layers"
-                label={`${drafts.length} transaksi`}
+                label={fill(d.add.transactionCount, { count: drafts.length })}
                 color={colors.textMuted}
               />
             </View>
@@ -298,16 +300,16 @@ export default function AddScreen() {
               {formatDuration(recState.durationMillis)}
             </Txt>
             <Txt variant="caption" color={colors.textMuted} style={{ marginTop: space.xs }}>
-              Sedang merekam — sebutkan transaksinya
+              {d.voice.recording}
             </Txt>
             <Button
-              title="Berhenti & salin"
+              title={d.voice.stopAndTranscribe}
               icon="square"
               onPress={toggleRecording}
               style={{ marginTop: space.xl, alignSelf: 'stretch' }}
             />
             <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.md, textAlign: 'center' }}>
-              Contoh: “tadi makan siang tiga puluh lima ribu”
+              {d.voice.example}
             </Txt>
           </Card>
         ) : (
@@ -316,22 +318,22 @@ export default function AddScreen() {
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="Tulis apa adanya…&#10;“kemarin bensin 50k, kopi 22k, parkir 5k”"
+                placeholder={d.add.inputPlaceholder}
                 placeholderTextColor={colors.textFaint}
                 multiline
                 autoFocus
                 style={[type.body, styles.input]}
                 onSubmitEditing={() => void runParse(text)}
-                accessibilityLabel="Catatan transaksi"
+                accessibilityLabel={d.add.title}
               />
             </Card>
 
             <View>
               <Txt variant="overline" color={colors.textFaint} style={{ marginBottom: space.sm }}>
-                Contoh
+                {d.add.examples}
               </Txt>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {CONTOH.map((c) => (
+                {d.add.samples.map((c) => (
                   <Pressable key={c} onPress={() => setText(c)} style={styles.sample}>
                     <Txt variant="caption" color={colors.textMuted}>
                       {c}
@@ -349,14 +351,14 @@ export default function AddScreen() {
                 setError(null);
               }}
               accessibilityRole="button"
-              accessibilityLabel="Isi manual"
+              accessibilityLabel={d.add.manualTitle}
               style={({ pressed }) => [styles.manualBtn, pressed && { borderColor: colors.accent }]}
             >
               <Feather name="edit-3" size={15} color={colors.textMuted} />
               <View style={{ flex: 1 }}>
-                <Txt variant="bodyStrong">Isi manual</Txt>
+                <Txt variant="bodyStrong">{d.add.manualTitle}</Txt>
                 <Txt variant="caption" color={colors.textFaint}>
-                  Ketik sendiri nominal, kategori, dan tanggalnya
+                  {d.add.manualBody}
                 </Txt>
               </View>
               <Feather name="chevron-right" size={16} color={colors.textFaint} />
@@ -364,8 +366,7 @@ export default function AddScreen() {
 
             {!voiceAvailable ? (
               <Txt variant="caption" color={colors.textFaint}>
-                Mode gratis aktif — semua diurai di HP tanpa internet. Input suara butuh AI
-                diaktifkan lebih dulu (lihat Atur).
+                {d.add.freeModeNote}
               </Txt>
             ) : null}
           </>
@@ -395,7 +396,7 @@ export default function AddScreen() {
         {drafts ? (
           <>
             <Button
-              title="Ulangi"
+              title={d.add.again}
               variant="secondary"
               icon="rotate-ccw"
               onPress={() => {
@@ -404,7 +405,7 @@ export default function AddScreen() {
               }}
             />
             <Button
-              title={`Simpan · ${drafts.length}`}
+              title={fill(d.add.saveCount, { count: drafts.length })}
               icon="check"
               onPress={save}
               loading={busy}
@@ -425,14 +426,14 @@ export default function AddScreen() {
               <Pressable
                 onPress={toggleRecording}
                 disabled={busy}
-                accessibilityLabel="Rekam suara"
+                accessibilityLabel={d.voice.record}
                 style={({ pressed }) => [styles.mic, pressed && { borderColor: colors.accent }]}
               >
                 <Feather name="mic" size={20} color={colors.text} />
               </Pressable>
             ) : null}
             <Button
-              title="Urai"
+              title={d.add.parse}
               icon="arrow-right"
               onPress={() => void runParse(text)}
               loading={busy}
@@ -447,9 +448,9 @@ export default function AddScreen() {
       {drafts ? (
         <View style={[styles.totalBar, { bottom: (insets.bottom || space.lg) + 68 }]}>
           <Txt variant="caption" color={colors.textFaint}>
-            Total
+            {d.add.total}
           </Txt>
-          <Txt variant="amount">{new Intl.NumberFormat('id-ID').format(total)}</Txt>
+          <Txt variant="amount">{money(total)}</Txt>
         </View>
       ) : null}
     </KeyboardAvoidingView>

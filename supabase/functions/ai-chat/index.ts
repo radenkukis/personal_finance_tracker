@@ -10,6 +10,7 @@
  */
 import { fail, json, serveAuthed, type AuthedContext } from '../_shared/http.ts';
 import { chat, llmProvider } from '../_shared/providers.ts';
+import { readVoice } from '../_shared/voice.ts';
 
 const MAX_QUESTION_CHARS = 500;
 const MAX_HISTORY_TURNS = 6;
@@ -42,7 +43,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
   const summary = await buildSummary(ctx);
   const history = (body?.history ?? []).slice(-MAX_HISTORY_TURNS);
 
-  const result = await chat(question, summary, history);
+  const result = await chat(question, summary, history, await readVoice(ctx.db));
 
   return json({
     answer: result.answer,

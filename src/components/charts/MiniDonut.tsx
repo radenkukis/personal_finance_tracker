@@ -8,6 +8,7 @@ import Svg, { Circle, G } from 'react-native-svg';
 import { colors, radius, space } from '@/lib/theme';
 import { Txt } from '@/components/ui';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 
 export interface Slice {
   label: string;
@@ -23,13 +24,14 @@ const MAX_SLICES = 5;
 
 export function MiniDonut({ slices }: { slices: readonly Slice[] }) {
   const { compact } = useMoney();
-  const merged = mergeTail(slices);
+  const { d } = useT();
+  const merged = mergeTail(slices, d.home.otherCategories);
   const total = merged.reduce((acc, s) => acc + s.value, 0);
 
   if (total <= 0) {
     return (
       <Txt variant="caption" color={colors.textFaint}>
-        Belum ada pengeluaran bulan ini.
+        {d.home.noSpendingYet}
       </Txt>
     );
   }
@@ -94,11 +96,11 @@ export function MiniDonut({ slices }: { slices: readonly Slice[] }) {
   );
 }
 
-function mergeTail(slices: readonly Slice[]): Slice[] {
+function mergeTail(slices: readonly Slice[], otherLabel: string): Slice[] {
   const sorted = [...slices].filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
   if (sorted.length <= MAX_SLICES) return sorted;
 
   const head = sorted.slice(0, MAX_SLICES - 1);
   const tailTotal = sorted.slice(MAX_SLICES - 1).reduce((acc, s) => acc + s.value, 0);
-  return [...head, { label: 'Lainnya', value: tailTotal, color: colors.textFaint }];
+  return [...head, { label: otherLabel, value: tailTotal, color: colors.textFaint }];
 }

@@ -10,6 +10,7 @@ import { callFunction } from '@/lib/supabase';
 import { parseLocal } from '@/lib/localParser';
 import type { Account, Category, DraftTransaction, TxSource } from '@/types/db';
 import type { Finding } from '@/analytics/detectors';
+import { en, interpolate, type Dictionary } from '@/lib/i18n';
 
 export type AiMode = 'local' | 'remote';
 
@@ -43,6 +44,8 @@ export async function smartParse(
   categories: readonly Category[],
   accounts: readonly Account[],
   source: TxSource = 'ai_text',
+  /* Kalimat peringatan ikut bahasa user; yang dihitung tetap sama. */
+  d: Dictionary = en,
 ): Promise<ParseOutcome> {
   const local = parseLocal(text, categories, accounts, new Date(), source);
 
@@ -70,8 +73,8 @@ export async function smartParse(
     const warning = local.unparsed.length === 0
       ? null
       : local.drafts.length > 0
-        ? `Sebagian tidak terbaca: "${local.unparsed.join('; ')}". Tambahkan sendiri, atau aktifkan AI di Pengaturan.`
-        : 'Kalimatnya belum bisa dibaca mode gratis. Coba sebutkan nominalnya, misalnya "kopi 25rb".';
+        ? interpolate(d.add.partiallyParsed, { parts: local.unparsed.join('; ') })
+        : d.add.freeModeUnreadable;
 
     return { drafts: local.drafts, usedAI: false, warning };
   }
@@ -107,8 +110,8 @@ export async function smartParse(
       usedAI: false,
       warning:
         local.drafts.length > 0
-          ? `AI tidak bisa dihubungi, jadi sebagian mungkin terlewat. (${messageOf(e)})`
-          : `AI tidak bisa dihubungi. ${messageOf(e)}`,
+          ? interpolate(d.add.aiUnreachablePartial, { error: messageOf(e) })
+          : interpolate(d.add.aiUnreachable, { error: messageOf(e) }),
     };
   }
 }
@@ -169,5 +172,5 @@ export async function summarizeFindings(findings: readonly Finding[]): Promise<s
 }
 
 function messageOf(e: unknown): string {
-  return e instanceof Error ? e.message : 'Kesalahan tidak diketahui.';
+  return e instanceof Error ? e.message : en.common.unknownError;
 }

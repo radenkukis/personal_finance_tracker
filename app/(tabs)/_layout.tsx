@@ -5,6 +5,8 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { colors, radius, size, space } from '@/lib/theme';
+import { useT } from '@/hooks/useT';
+import type { Dictionary } from '@/lib/i18n';
 
 /**
  * expo-router 57 tidak lagi mengekspor tipe @react-navigation secara publik,
@@ -14,20 +16,22 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>
 type TabRoute = TabBarProps['state']['routes'][number];
 
 const TABS = [
-  { name: 'index', label: 'Beranda', icon: 'home' },
-  { name: 'transactions', label: 'Riwayat', icon: 'list' },
-  { name: 'chat', label: 'Tanya', icon: 'message-circle' },
-  { name: 'settings', label: 'Atur', icon: 'sliders' },
+  { name: 'index', icon: 'home', label: (d: Dictionary) => d.tabs.home },
+  { name: 'transactions', icon: 'list', label: (d: Dictionary) => d.tabs.history },
+  { name: 'chat', icon: 'message-circle', label: (d: Dictionary) => d.tabs.ask },
+  { name: 'settings', icon: 'sliders', label: (d: Dictionary) => d.tabs.settings },
 ] as const;
 
 export default function TabsLayout() {
+  const { d } = useT();
+
   return (
     <Tabs
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}
       tabBar={(props) => <CompactTabBar {...props} />}
     >
       {TABS.map((t) => (
-        <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label }} />
+        <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label(d) }} />
       ))}
     </Tabs>
   );
@@ -40,6 +44,7 @@ export default function TabsLayout() {
 function CompactTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { d } = useT();
 
   // Dua tab kiri, tombol tambah, dua tab kanan.
   const left = state.routes.slice(0, 2);
@@ -55,7 +60,7 @@ function CompactTabBar({ state, navigation }: TabBarProps) {
         key={route.key}
         accessibilityRole="tab"
         accessibilityState={{ selected: focused }}
-        accessibilityLabel={meta.label}
+        accessibilityLabel={meta.label(d)}
         onPress={() => {
           if (!focused) navigation.navigate(route.name);
         }}
@@ -79,7 +84,7 @@ function CompactTabBar({ state, navigation }: TabBarProps) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Tambah transaksi"
+        accessibilityLabel={d.tabs.addTransaction}
         onPress={() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push('/add');

@@ -16,6 +16,7 @@ import { TransactionEditorCard } from '@/components/DraftReviewSheet';
 import { colors, space } from '@/lib/theme';
 import { useData } from '@/store/data';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import { sameCategoryName } from '@/lib/categories';
 import type { DraftTransaction } from '@/types/db';
 
@@ -25,6 +26,7 @@ export default function EditScreen() {
   const router = useRouter();
   const { transactions, categories, updateTransaction, deleteTransaction } = useData();
   const { money } = useMoney();
+  const { d } = useT();
 
   const original = useMemo(() => transactions.find((t) => t.id === id), [transactions, id]);
 
@@ -54,7 +56,7 @@ export default function EditScreen() {
   const save = useCallback(async () => {
     if (!draft || !original) return;
     if (draft.amount <= 0) {
-      setError('Nominal harus lebih dari nol.');
+      setError(d.editScreen.amountPositive);
       return;
     }
 
@@ -79,20 +81,20 @@ export default function EditScreen() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
+      setError(e instanceof Error ? e.message : d.add.saveFailed);
     } finally {
       setBusy(false);
     }
-  }, [draft, original, categories, updateTransaction, router]);
+  }, [draft, original, categories, updateTransaction, router, d]);
 
   if (!original || !draft) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', padding: space.lg }}>
         <EmptyState
           icon="search"
-          title="Transaksi tidak ditemukan"
-          body="Mungkin sudah dihapus dari perangkat lain."
-          action={<Button title="Kembali" variant="secondary" onPress={() => router.back()} />}
+          title={d.editScreen.notFoundTitle}
+          body={d.editScreen.notFoundBody}
+          action={<Button title={d.editScreen.back} variant="secondary" onPress={() => router.back()} />}
         />
       </View>
     );
@@ -112,8 +114,8 @@ export default function EditScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-        <Txt variant="title">Ubah transaksi</Txt>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Tutup">
+        <Txt variant="title">{d.editScreen.title}</Txt>
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel={d.common.close}>
           <Feather name="x" size={20} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -131,11 +133,11 @@ export default function EditScreen() {
         {changed ? (
           <Card style={{ borderColor: withAlpha(colors.accent, 0.4) }}>
             <Txt variant="overline" color={colors.textFaint}>
-              Sebelum diubah
+              {d.editScreen.beforeChange}
             </Txt>
             <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 4, lineHeight: 18 }}>
               {money(Number(original.amount))} ·{' '}
-              {original.category?.name ?? 'tanpa kategori'}
+              {original.category?.name ?? d.common.uncategorized}
               {original.merchant ? ` · ${original.merchant}` : ''}
               {original.note ? ` · ${original.note}` : ''}
             </Txt>
@@ -151,7 +153,7 @@ export default function EditScreen() {
         ) : null}
 
         <Button
-          title="Hapus transaksi"
+          title={d.editScreen.deleteTransaction}
           variant="danger"
           icon="trash-2"
           full
@@ -163,9 +165,9 @@ export default function EditScreen() {
       </ScrollView>
 
       <View style={[styles.actions, { paddingBottom: insets.bottom || space.lg }]}>
-        <Button title="Batal" variant="secondary" onPress={() => router.back()} />
+        <Button title={d.common.cancel} variant="secondary" onPress={() => router.back()} />
         <Button
-          title="Simpan perubahan"
+          title={d.editScreen.saveChanges}
           icon="check"
           onPress={save}
           loading={busy}

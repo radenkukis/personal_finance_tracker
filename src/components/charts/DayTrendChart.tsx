@@ -12,6 +12,7 @@ import Svg, { G, Line, Rect } from 'react-native-svg';
 import { colors, radius, space } from '@/lib/theme';
 import { Txt } from '@/components/ui';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import type { DaySpend, MonthProjection } from '@/analytics/projection';
 import { dayKey } from '@/lib/format';
 
@@ -28,6 +29,7 @@ export function DayTrendChart({
   today?: Date;
 }) {
   const { compact } = useMoney();
+  const { d, fill } = useT();
   const [width, setWidth] = useState(0);
 
   const todayKey = dayKey(today);
@@ -55,11 +57,11 @@ export function DayTrendChart({
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: space.sm }}>
         <Txt variant="caption" color={colors.textMuted}>
-          Rata-rata {compact(projection.dailyAverage)}/hari
+          {fill(d.home.averagePerDay, { amount: compact(projection.dailyAverage) })}
         </Txt>
         {projection.daysRemaining > 0 ? (
           <Txt variant="caption" color={colors.textFaint}>
-            Proyeksi {compact(projection.projectedTotal)}
+            {fill(d.home.projection, { amount: compact(projection.projectedTotal) })}
           </Txt>
         ) : null}
       </View>
@@ -107,10 +109,10 @@ export function DayTrendChart({
       </View>
 
       <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.sm }}>
-        <LegendDot color={colors.expense} label="Terpakai" />
-        <LegendDot color={colors.accent} label="Hari ini" />
+        <LegendDot color={colors.expense} label={d.home.legendSpent} />
+        <LegendDot color={colors.accent} label={d.home.legendToday} />
         {projection.daysRemaining > 0 ? (
-          <LegendDot color={colors.barIdle} label="Proyeksi" />
+          <LegendDot color={colors.barIdle} label={d.home.legendProjected} />
         ) : null}
       </View>
     </View>

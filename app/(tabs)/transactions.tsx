@@ -9,8 +9,9 @@ import { TransactionRow } from '@/components/TransactionRow';
 import { TransactionFilters } from '@/components/TransactionFilters';
 import { useData } from '@/store/data';
 import { colors, radius, size, space } from '@/lib/theme';
-import { dayKey, relativeDay } from '@/lib/format';
+import { dayKey } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 import { activeFilterCount, applyFilters, EMPTY_FILTERS, type Filters } from '@/lib/filters';
 import type { TransactionWithRefs } from '@/types/db';
 
@@ -19,6 +20,7 @@ export default function RiwayatScreen() {
   const router = useRouter();
   const { transactions, refresh, deleteTransaction } = useData();
   const { money } = useMoney();
+  const { d, fill, relativeDay } = useT();
 
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -55,16 +57,16 @@ export default function RiwayatScreen() {
         .reduce((acc, t) => acc + Number(t.amount), 0),
       count: filtered.length,
     };
-  }, [transactions, query, filters]);
+  }, [transactions, query, filters, relativeDay]);
 
   function confirmDelete(tx: TransactionWithRefs) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
-      'Hapus transaksi?',
-      `${tx.merchant ?? tx.note ?? tx.category?.name ?? 'Transaksi'} · ${money(Number(tx.amount))}`,
+      d.history.deleteTitle,
+      `${tx.merchant ?? tx.note ?? tx.category?.name ?? d.common.uncategorized} · ${money(Number(tx.amount))}`,
       [
-        { text: 'Batal', style: 'cancel' },
-        { text: 'Hapus', style: 'destructive', onPress: () => void deleteTransaction(tx.id) },
+        { text: d.common.cancel, style: 'cancel' },
+        { text: d.common.delete, style: 'destructive', onPress: () => void deleteTransaction(tx.id) },
       ],
     );
   }
@@ -75,10 +77,10 @@ export default function RiwayatScreen() {
     <View style={{ flex: 1, paddingTop: insets.top + space.md }}>
       <View style={{ paddingHorizontal: space.lg, gap: space.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <Txt variant="title">Riwayat</Txt>
+          <Txt variant="title">{d.history.title}</Txt>
           {filtering ? (
             <Txt variant="caption" color={colors.textFaint}>
-              {count} transaksi · {money(total)}
+              {fill(d.history.resultSummary, { count, amount: money(total) })}
             </Txt>
           ) : null}
         </View>
@@ -89,14 +91,14 @@ export default function RiwayatScreen() {
               icon="search"
               value={query}
               onChangeText={setQuery}
-              placeholder="Cari tempat, catatan, kategori…"
+              placeholder={d.history.searchPlaceholder}
               autoCapitalize="none"
             />
           </View>
           <Pressable
             onPress={() => setShowFilters((v) => !v)}
             accessibilityRole="button"
-            accessibilityLabel="Penyaring"
+            accessibilityLabel={d.history.filters}
             accessibilityState={{ expanded: showFilters }}
             style={[
               styles.filterBtn,
@@ -180,16 +182,12 @@ export default function RiwayatScreen() {
         ListEmptyComponent={
           <EmptyState
             icon={filtering ? 'search' : 'inbox'}
-            title={filtering ? 'Tidak ada yang cocok' : 'Belum ada transaksi'}
-            body={
-              filtering
-                ? 'Coba longgarkan penyaringnya, atau pakai kata kunci lain.'
-                : 'Semua yang kamu catat akan muncul di sini, dikelompokkan per hari.'
-            }
+            title={filtering ? d.history.noMatchTitle : d.history.emptyTitle}
+            body={filtering ? d.history.noMatchBody : d.history.emptyBody}
             action={
               filtering ? (
                 <Button
-                  title="Bersihkan penyaring"
+                  title={d.history.clearFilters}
                   variant="secondary"
                   icon="rotate-ccw"
                   onPress={() => {
@@ -198,7 +196,7 @@ export default function RiwayatScreen() {
                   }}
                 />
               ) : (
-                <Button title="Catat sekarang" icon="plus" onPress={() => router.push('/add')} />
+                <Button title={d.history.recordNow} icon="plus" onPress={() => router.push('/add')} />
               )
             }
           />
@@ -209,7 +207,7 @@ export default function RiwayatScreen() {
         <View style={styles.hint}>
           <Feather name="info" size={11} color={colors.textFaint} />
           <Txt variant="caption" color={colors.textFaint}>
-            Ketuk untuk mengubah · tekan lama untuk menghapus
+            {d.history.hint}
           </Txt>
         </View>
       ) : null}

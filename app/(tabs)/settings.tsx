@@ -6,12 +6,15 @@ import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha }
 import { colors, size, space } from '@/lib/theme';
 import { useMoney } from '@/hooks/useMoney';
 import { CurrencyPicker } from '@/components/CurrencyPicker';
+import { LanguagePicker } from '@/components/LanguagePicker';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { aiMode, summarizeFindings } from '@/lib/ai';
 import { useSession } from '@/store/session';
 import { useData } from '@/store/data';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useT } from '@/hooks/useT';
+import { LOCALE_NAMES, PARSER_LOCALES, type Locale } from '@/lib/i18n';
 
 export default function AturScreen() {
   const insets = useSafeAreaInsets();
@@ -19,6 +22,7 @@ export default function AturScreen() {
   const { categories, transactions } = useData();
   const dashboard = useDashboard();
   const { money, currency } = useMoney();
+  const { d, fill, locale } = useT();
   const router = useRouter();
 
   const [nickname, setNickname] = useState(profile?.display_name ?? '');
@@ -28,13 +32,14 @@ export default function AturScreen() {
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
 
   const remote = aiMode() === 'remote';
 
   const saveNickname = useCallback(async () => {
     const name = nickname.trim();
     if (!name) {
-      setError('Nama panggilan tidak boleh kosong.');
+      setError(d.settings.nicknameEmpty);
       return;
     }
     setSavingName(true);
@@ -49,11 +54,11 @@ export default function AturScreen() {
       setSavedName(true);
       setTimeout(() => setSavedName(false), 2000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
+      setError(e instanceof Error ? e.message : d.settings.saveFailed);
     } finally {
       setSavingName(false);
     }
-  }, [nickname, refreshProfile, session]);
+  }, [nickname, refreshProfile, session, d]);
 
   const saveCurrency = useCallback(
     async (code: string) => {
@@ -68,10 +73,32 @@ export default function AturScreen() {
         // Profil dimuat ulang supaya seluruh layar langsung memakai format baru.
         await refreshProfile();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Gagal mengganti mata uang.');
+        setError(e instanceof Error ? e.message : d.settings.saveFailed);
       }
     },
-    [refreshProfile, session],
+    [refreshProfile, session, d],
+  );
+
+  /*
+   * Bahasa disimpan di profil, bukan hanya di HP, supaya pilihannya ikut saat
+   * user masuk dari perangkat lain - sama seperti mata uang.
+   */
+  const saveLanguage = useCallback(
+    async (code: Locale) => {
+      setLangOpen(false);
+      setError(null);
+      try {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ language: code })
+          .eq('id', session?.user.id ?? '');
+        if (updateError) throw new Error(updateError.message);
+        await refreshProfile();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : d.settings.saveFailed);
+      }
+    },
+    [refreshProfile, session, d],
   );
 
   const makeSummary = useCallback(async () => {
@@ -80,11 +107,11 @@ export default function AturScreen() {
     try {
       setSummary(await summarizeFindings(dashboard.findings));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal membuat ringkasan.');
+      setError(e instanceof Error ? e.message : d.settings.saveFailed);
     } finally {
       setSummaryBusy(false);
     }
-  }, [dashboard.findings]);
+  }, [dashboard.findings, d]);
 
   return (
     <ScrollView
@@ -95,11 +122,11 @@ export default function AturScreen() {
         gap: space.lg,
       }}
     >
-      <Txt variant="title">Atur</Txt>
+      <Txt variant="title">{d.settings.title}</Txt>
 
       {/* --- Status AI --------------------------------------------------- */}
       <View>
-        <SectionLabel>Mode AI</SectionLabel>
+        <SectionLabel>{d.settings.aiMode}</SectionLabel>
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
             <IconBadge
@@ -108,11 +135,9 @@ export default function AturScreen() {
               diameter={34}
             />
             <View style={{ flex: 1 }}>
-              <Txt variant="bodyStrong">{remote ? 'AI aktif' : 'Mode gratis'}</Txt>
+              <Txt variant="bodyStrong">{remote ? d.settings.aiOn : d.settings.aiOff}</Txt>
               <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2 }}>
-                {remote
-                  ? 'Kalimat rumit, suara, dan chat diproses lewat Edge Function.'
-                  : 'Semua diurai di HP dengan regex. Tanpa internet, tanpa biaya.'}
+                {remote ? d.settings.aiOnBody : d.settings.aiOffBody}
               </Txt>
             </View>
           </View>
@@ -123,12 +148,7 @@ export default function AturScreen() {
                 <Divider />
               </View>
               <Txt variant="caption" color={colors.textFaint} style={{ lineHeight: 18 }}>
-                Untuk mengaktifkan AI: pasang API key di Supabase{' '}
-                <Txt variant="caption" color={colors.accent}>
-                  (supabase secrets set LLM_PROVIDER=gemini GEMINI_API_KEY=…)
-                </Txt>
-                , lalu ubah EXPO_PUBLIC_AI_MODE=remote di file .env. Langkah lengkapnya ada di
-                README.
+                {d.settings.aiSetupHint}
               </Txt>
             </>
           ) : null}
@@ -138,7 +158,7 @@ export default function AturScreen() {
       {/* --- Ringkasan mingguan ------------------------------------------ */}
       {remote ? (
         <View>
-          <SectionLabel>Ringkasan mingguan</SectionLabel>
+          <SectionLabel>{d.settings.weeklySummary}</SectionLabel>
           <Card>
             {summary ? (
               <Txt variant="body" style={{ lineHeight: 21 }}>
@@ -147,12 +167,12 @@ export default function AturScreen() {
             ) : (
               <Txt variant="caption" color={colors.textMuted}>
                 {dashboard.findings.length > 0
-                  ? `${dashboard.findings.length} temuan siap diringkas menjadi narasi.`
-                  : 'Belum ada temuan. Catat beberapa transaksi dulu.'}
+                  ? fill(d.settings.findingsReady, { count: dashboard.findings.length })
+                  : d.settings.noFindings}
               </Txt>
             )}
             <Button
-              title={summary ? 'Buat ulang' : 'Buat ringkasan'}
+              title={summary ? d.settings.remakeSummary : d.settings.makeSummary}
               variant="secondary"
               icon="feather"
               onPress={makeSummary}
@@ -173,12 +193,12 @@ export default function AturScreen() {
             </Txt>
           }
         >
-          Kategori
+          {d.settings.categories}
         </SectionLabel>
         <Pressable
           onPress={() => router.push('/categories')}
           accessibilityRole="button"
-          accessibilityLabel="Kelola kategori"
+          accessibilityLabel={d.settings.manageCategories}
           style={({ pressed }) => [
             {
               backgroundColor: pressed ? colors.surfacePressed : colors.surface,
@@ -194,26 +214,25 @@ export default function AturScreen() {
         >
           <IconBadge name="tag" color={colors.accent} diameter={34} />
           <View style={{ flex: 1 }}>
-            <Txt variant="bodyStrong">Kelola kategori</Txt>
+            <Txt variant="bodyStrong">{d.settings.manageCategories}</Txt>
             <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
-              Tambah, ubah nama, warna, dan kata kunci
+              {d.settings.manageCategoriesBody}
             </Txt>
           </View>
           <Feather name="chevron-right" size={18} color={colors.textFaint} />
         </Pressable>
         <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm, lineHeight: 17 }}>
-          Kata kunci menentukan apa yang bisa dikenali tanpa AI — makin cocok
-          dengan caramu menulis, makin sering catatanmu diurai gratis dan seketika.
+          {d.settings.keywordsHint}
         </Txt>
       </View>
 
       {/* --- Mata uang ---------------------------------------------------- */}
       <View>
-        <SectionLabel>Mata uang</SectionLabel>
+        <SectionLabel>{d.settings.currency}</SectionLabel>
         <Pressable
           onPress={() => setPickerOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel="Ganti mata uang"
+          accessibilityLabel={d.settings.currency}
           style={({ pressed }) => [
             {
               backgroundColor: pressed ? colors.surfacePressed : colors.surface,
@@ -243,22 +262,58 @@ export default function AturScreen() {
           <View style={{ flex: 1 }}>
             <Txt variant="bodyStrong">{currency.name}</Txt>
             <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
-              Contoh tampilan: {money(1250000)}
+              {fill(d.settings.currencyExample, { example: money(1250000) })}
             </Txt>
           </View>
           <Feather name="chevron-right" size={18} color={colors.textFaint} />
         </Pressable>
         <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm, lineHeight: 17 }}>
-          Hanya mengubah tampilan. Nilai transaksi yang sudah tercatat tidak dikonversi.
+          {d.settings.currencyNote}
+        </Txt>
+      </View>
+
+      {/* --- Bahasa ------------------------------------------------------- */}
+      <View>
+        <SectionLabel>{d.settings.language}</SectionLabel>
+        <Pressable
+          onPress={() => setLangOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={d.settings.language}
+          style={({ pressed }) => [
+            {
+              backgroundColor: pressed ? colors.surfacePressed : colors.surface,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              padding: space.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.md,
+            },
+          ]}
+        >
+          <IconBadge name="globe" color={colors.accent} diameter={34} />
+          <View style={{ flex: 1 }}>
+            <Txt variant="bodyStrong">{LOCALE_NAMES[locale].native}</Txt>
+            <Txt variant="caption" color={colors.textFaint} style={{ marginTop: 2 }}>
+              {PARSER_LOCALES.includes(locale)
+                ? d.settings.parserSupported
+                : d.settings.parserUnsupported}
+            </Txt>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.textFaint} />
+        </Pressable>
+        <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm, lineHeight: 17 }}>
+          {d.settings.languageNote}
         </Txt>
       </View>
 
       {/* --- Nama panggilan ------------------------------------------------ */}
       <View>
-        <SectionLabel>Nama panggilan</SectionLabel>
+        <SectionLabel>{d.settings.nickname}</SectionLabel>
         <Card>
           <Txt variant="caption" color={colors.textMuted} style={{ marginBottom: space.md }}>
-            Dipakai untuk menyapamu di beranda.
+            {d.settings.nicknameBody}
           </Txt>
           <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
@@ -266,13 +321,13 @@ export default function AturScreen() {
                 icon="user"
                 value={nickname}
                 onChangeText={setNickname}
-                placeholder="mis. Brandon"
+                placeholder={d.settings.nicknamePlaceholder}
                 maxLength={30}
                 autoCapitalize="words"
               />
             </View>
             <Button
-              title={savedName ? 'Tersimpan' : 'Simpan'}
+              title={savedName ? d.settings.saved : d.common.save}
               icon={savedName ? 'check' : undefined}
               onPress={saveNickname}
               loading={savingName}
@@ -284,12 +339,12 @@ export default function AturScreen() {
 
       {/* --- Ringkasan akun ----------------------------------------------- */}
       <View>
-        <SectionLabel>Data kamu</SectionLabel>
+        <SectionLabel>{d.settings.yourData}</SectionLabel>
         <Card>
-          <Row label="Email" value={session?.user.email ?? '—'} />
-          <Row label="Transaksi tercatat" value={String(transactions.length)} />
-          <Row label="Kategori" value={String(categories.length)} />
-          <Row label="Saldo terhitung" value={money(dashboard.balance)} last />
+          <Row label={d.settings.dataEmail} value={session?.user.email ?? '—'} />
+          <Row label={d.settings.dataTransactions} value={String(transactions.length)} />
+          <Row label={d.settings.dataCategories} value={String(categories.length)} />
+          <Row label={d.settings.dataBalance} value={money(dashboard.balance)} last />
         </Card>
       </View>
 
@@ -301,7 +356,13 @@ export default function AturScreen() {
         </Card>
       ) : null}
 
-      <Button title="Keluar" variant="danger" icon="log-out" onPress={() => void signOut()} full />
+      <Button
+        title={d.settings.signOut}
+        variant="danger"
+        icon="log-out"
+        onPress={() => void signOut()}
+        full
+      />
 
       <CurrencyPicker
         visible={pickerOpen}
@@ -310,10 +371,17 @@ export default function AturScreen() {
         onClose={() => setPickerOpen(false)}
       />
 
+      <LanguagePicker
+        visible={langOpen}
+        current={locale}
+        onPick={saveLanguage}
+        onClose={() => setLangOpen(false)}
+      />
+
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
         <Feather name="shield" size={11} color={colors.textFaint} />
         <Txt variant="caption" color={colors.textFaint}>
-          Datamu hanya bisa dibaca akunmu sendiri
+          {d.settings.privacyNote}
         </Txt>
       </View>
     </ScrollView>

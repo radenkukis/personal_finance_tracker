@@ -4,6 +4,7 @@ import { Card, Txt } from '@/components/ui';
 import { colors, space } from '@/lib/theme';
 import { percentChange } from '@/analytics/projection';
 import { useMoney } from '@/hooks/useMoney';
+import { useT } from '@/hooks/useT';
 
 export function StatStrip({
   income,
@@ -15,21 +16,22 @@ export function StatStrip({
   previousExpense: number;
 }) {
   const { compact } = useMoney();
+  const { d, fill } = useT();
   const net = income - expense;
   const change = percentChange(expense, previousExpense);
 
   return (
     <View style={{ flexDirection: 'row', gap: space.sm }}>
-      <Stat label="Masuk" value={compact(income)} tone={colors.income} />
+      <Stat label={d.home.statIn} value={compact(income)} tone={colors.income} />
       <Stat
-        label="Keluar"
+        label={d.home.statOut}
         value={compact(expense)}
         tone={colors.expense}
-        hint={change === null ? undefined : `${formatChange(change)} vs bulan lalu`}
+        hint={change === null ? undefined : fill(d.home.vsLastMonth, { change: formatChange(change) })}
         hintTone={change !== null && change > 0 ? colors.warning : colors.textFaint}
       />
       <Stat
-        label="Sisa"
+        label={d.home.statNet}
         value={compact(net)}
         tone={net >= 0 ? colors.text : colors.expense}
       />

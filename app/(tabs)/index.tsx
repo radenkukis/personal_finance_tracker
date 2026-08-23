@@ -12,8 +12,8 @@ import { MiniDonut } from '@/components/charts/MiniDonut';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useData } from '@/store/data';
 import { useSession } from '@/store/session';
+import { useT } from '@/hooks/useT';
 import { colors, size, space } from '@/lib/theme';
-import { monthLabel } from '@/lib/format';
 
 /** Dashboard hanya memperlihatkan tiga temuan teratas; sisanya jadi kebisingan. */
 const MAX_INSIGHTS = 3;
@@ -24,6 +24,7 @@ export default function BerandaScreen() {
   const { refresh, error } = useData();
   const { profile } = useSession();
   const d = useDashboard();
+  const { d: t, fill, monthLabel } = useT();
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -32,7 +33,9 @@ export default function BerandaScreen() {
     setRefreshing(false);
   }, [refresh]);
 
-  const greeting = profile?.display_name ? `Halo, ${profile.display_name}` : 'Halo';
+  const greeting = profile?.display_name
+    ? fill(t.home.greetingNamed, { name: profile.display_name })
+    : t.home.greeting;
 
   return (
     <ScrollView
@@ -65,16 +68,15 @@ export default function BerandaScreen() {
             <IconBadge name="wifi-off" color={colors.expense} diameter={32} />
             <View style={{ flex: 1 }}>
               <Txt variant="bodyStrong" color={colors.expense}>
-                Data belum berhasil dimuat
+                {t.home.loadFailedTitle}
               </Txt>
               <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 2, lineHeight: 17 }}>
-                Transaksimu tetap aman tersimpan. Biasanya karena koneksi
-                terputus sebentar.
+                {t.home.loadFailedBody}
               </Txt>
             </View>
           </View>
           <Button
-            title="Coba lagi"
+            title={t.common.retry}
             variant="secondary"
             icon="refresh-cw"
             onPress={onRefresh}
@@ -89,11 +91,11 @@ export default function BerandaScreen() {
         <Card>
           <EmptyState
             icon="edit-3"
-            title="Belum ada transaksi"
-            body="Tulis saja apa adanya, misalnya “kopi 25rb” atau “kemarin bensin 50k gopay”. Sisanya app yang rapikan."
+            title={t.home.emptyTitle}
+            body={t.home.emptyBody}
             action={
               <Button
-                title="Catat yang pertama"
+                title={t.home.emptyAction}
                 icon="plus"
                 onPress={() => router.push('/add')}
               />
@@ -112,7 +114,7 @@ export default function BerandaScreen() {
 
           {d.findings.length > 0 ? (
             <View>
-              <SectionLabel>Yang perlu kamu tahu</SectionLabel>
+              <SectionLabel>{t.home.needToKnow}</SectionLabel>
               <View style={{ gap: space.sm }}>
                 {d.findings.slice(0, MAX_INSIGHTS).map((f, i) => (
                   <InsightCard key={`${f.kind}-${i}`} finding={f} />
@@ -122,14 +124,14 @@ export default function BerandaScreen() {
           ) : null}
 
           <View>
-            <SectionLabel>Pengeluaran harian</SectionLabel>
+            <SectionLabel>{t.home.dailySpending}</SectionLabel>
             <Card>
               <DayTrendChart series={d.series} projection={d.projection} />
             </Card>
           </View>
 
           <View>
-            <SectionLabel>Ke mana uangnya</SectionLabel>
+            <SectionLabel>{t.home.whereMoneyGoes}</SectionLabel>
             <Card>
               <MiniDonut slices={d.slices} />
             </Card>
@@ -139,11 +141,11 @@ export default function BerandaScreen() {
             <SectionLabel
               right={
                 <Txt variant="caption" color={colors.accent} onPress={() => router.push('/transactions')}>
-                  Lihat semua
+                  {t.home.seeAll}
                 </Txt>
               }
             >
-              Terakhir dicatat
+              {t.home.recent}
             </SectionLabel>
             <Card padded={false} style={{ overflow: 'hidden' }}>
               {d.recent.map((tx, i) => (

@@ -11,13 +11,10 @@ import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Divider, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, space, type } from '@/lib/theme';
+import type { Dictionary } from '@/lib/i18n';
 import { useMoney } from '@/hooks/useMoney';
-import {
-  EMPTY_FILTERS,
-  KIND_LABELS,
-  RANGE_LABELS,
-  type Filters,
-} from '@/lib/filters';
+import { useT } from '@/hooks/useT';
+import { EMPTY_FILTERS, type Filters, type KindFilter, type RangeKey } from '@/lib/filters';
 
 export function TransactionFilters({
   value,
@@ -27,6 +24,7 @@ export function TransactionFilters({
   onChange: (next: Filters) => void;
 }) {
   const { currency } = useMoney();
+  const { d, fill } = useT();
   const [min, setMin] = useState(value.minAmount?.toString() ?? '');
   const [max, setMax] = useState(value.maxAmount?.toString() ?? '');
 
@@ -40,8 +38,8 @@ export function TransactionFilters({
 
   return (
     <View style={{ gap: space.md }}>
-      <Row label="Jenis">
-        {KIND_LABELS.map(([key, label]) => (
+      <Row label={d.history.filterKind}>
+        {kindLabels(d).map(([key, label]) => (
           <Pill
             key={key}
             label={label}
@@ -51,8 +49,8 @@ export function TransactionFilters({
         ))}
       </Row>
 
-      <Row label="Waktu">
-        {RANGE_LABELS.map(([key, label]) => (
+      <Row label={d.history.filterTime}>
+        {rangeLabels(d).map(([key, label]) => (
           <Pill
             key={key}
             label={label}
@@ -64,7 +62,7 @@ export function TransactionFilters({
 
       <View>
         <Txt variant="overline" color={colors.textFaint} style={{ marginBottom: space.sm }}>
-          Nominal ({currency.code})
+          {fill(d.history.filterAmount, { currency: currency.code })}
         </Txt>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
           <TextInput
@@ -73,11 +71,11 @@ export function TransactionFilters({
               setMin(v);
               commitAmounts(v, max);
             }}
-            placeholder="minimal"
+            placeholder={d.history.min}
             placeholderTextColor={colors.textFaint}
             keyboardType="number-pad"
             style={[type.body, styles.amountInput]}
-            accessibilityLabel="Nominal minimal"
+            accessibilityLabel={d.history.min}
           />
           <Txt variant="caption" color={colors.textFaint}>
             —
@@ -88,11 +86,11 @@ export function TransactionFilters({
               setMax(v);
               commitAmounts(min, v);
             }}
-            placeholder="maksimal"
+            placeholder={d.history.max}
             placeholderTextColor={colors.textFaint}
             keyboardType="number-pad"
             style={[type.body, styles.amountInput]}
-            accessibilityLabel="Nominal maksimal"
+            accessibilityLabel={d.history.max}
           />
         </View>
       </View>
@@ -105,16 +103,36 @@ export function TransactionFilters({
           setMax('');
           onChange(EMPTY_FILTERS);
         }}
-        accessibilityLabel="Bersihkan semua penyaring"
+        accessibilityLabel={d.history.clearFilters}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}
       >
         <Feather name="rotate-ccw" size={13} color={colors.textMuted} />
         <Txt variant="caption" color={colors.textMuted}>
-          Bersihkan penyaring
+          {d.history.clearFilters}
         </Txt>
       </Pressable>
     </View>
   );
+}
+
+/** Label pilihan dibuat di sini, bukan di modul filters, karena teksnya
+ *  ikut bahasa sedangkan nilainya tidak. */
+function kindLabels(d: Dictionary): [KindFilter, string][] {
+  return [
+    ['all', d.common.all],
+    ['expense', d.common.expense],
+    ['income', d.common.income],
+  ];
+}
+
+function rangeLabels(d: Dictionary): [RangeKey, string][] {
+  return [
+    ['all', d.history.rangeAll],
+    ['this_month', d.history.rangeThisMonth],
+    ['last_month', d.history.rangeLastMonth],
+    ['last_7', d.history.range7],
+    ['last_30', d.history.range30],
+  ];
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
