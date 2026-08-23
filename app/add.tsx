@@ -14,11 +14,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
-  RecordingPresets,
+  AudioQuality,
+  IOSOutputFormat,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
+  type RecordingOptions,
 } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { Button, Card, Txt, withAlpha } from '@/components/ui';
@@ -29,6 +31,31 @@ import { useData } from '@/store/data';
 import type { DraftTransaction } from '@/types/db';
 
 const CONTOH = ['kopi 25rb', 'bensin 50k gopay', 'kemarin makan di padang 45rb', 'gajian 8jt'];
+
+/**
+ * Preset bawaan HIGH_QUALITY merekam 44,1 kHz stereo 128 kbps — kualitas musik
+ * untuk merekam orang berbicara. Berkasnya jadi sekitar empat kali lebih besar
+ * tanpa membuat transkripsi lebih akurat sedikit pun, dan yang membuat menunggu
+ * justru mengunggah berkas itu.
+ *
+ * 16 kHz mono sudah lebih dari cukup untuk suara manusia; itu pula laju yang
+ * dipakai mesin pengenal suara di baliknya.
+ */
+const PRESET_SUARA: RecordingOptions = {
+  extension: '.m4a',
+  sampleRate: 16_000,
+  numberOfChannels: 1,
+  bitRate: 32_000,
+  android: { outputFormat: 'mpeg4', audioEncoder: 'aac' },
+  ios: {
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.LOW,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: { mimeType: 'audio/webm', bitsPerSecond: 32_000 },
+};
 
 /** "0:07" · "1:23" — durasi rekaman yang sedang berjalan. */
 function formatDuration(ms: number): string {
@@ -66,7 +93,7 @@ export default function AddScreen() {
   const [error, setError] = useState<string | null>(null);
   const [usedAI, setUsedAI] = useState(false);
 
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(PRESET_SUARA);
   /*
    * `recorder.isRecording` TIDAK reaktif — membacanya langsung saat render
    * membuat tampilan tidak pernah berubah ketika perekaman dimulai, sehingga
@@ -116,7 +143,7 @@ export default function AddScreen() {
 
     if (isRecording) {
       setBusy(true);
-      setStatus('Menyalin suara…');
+      setStatus('Menyimpan rekaman…');
       try {
         await recorder.stop();
 
@@ -130,15 +157,18 @@ export default function AddScreen() {
         }
 
         const base64 = await new File(uri).base64();
-        // Berkas dari HIGH_QUALITY berekstensi .m4a di iOS maupun Android.
+
+        setStatus('Mengubah suara jadi teks…');
         const spoken = await transcribeAudio(base64, 'audio/m4a');
 
         if (!spoken.trim()) {
           throw new Error('Suaranya tidak tertangkap. Coba bicara lebih dekat ke mikrofon.');
         }
 
+        // Teksnya ditampilkan lebih dulu supaya user melihat hasilnya benar
+        // sebelum tahap berikutnya selesai — bukan menatap "loading" buta.
         setText(spoken);
-        setStatus(null);
+        setStatus('Mengurai transaksinya…');
         await runParse(spoken, 'ai_voice');
       } catch (e) {
         setStatus(null);
@@ -356,7 +386,11 @@ export default function AddScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Bilah aksi menempel di bawah */}
+      {/*
+        Bilah aksi disembunyikan selama merekam — tombol berhentinya sudah ada
+        di kartu perekaman, dan dua tombol yang sama di satu layar membingungkan.
+      */}
+      {isRecording ? null : (
       <View style={[styles.actions, { paddingBottom: insets.bottom || space.lg }]}>
         {drafts ? (
           <>
@@ -378,16 +412,6 @@ export default function AddScreen() {
               style={{ flex: 1 }}
             />
           </>
-        ) : isRecording ? (
-          // Saat merekam hanya ada satu aksi yang masuk akal.
-          <Button
-            title="Berhenti & salin"
-            icon="square"
-            onPress={toggleRecording}
-            loading={busy}
-            full
-            style={{ flex: 1 }}
-          />
         ) : busy && status ? (
           <View style={styles.workingBar}>
             <ActivityIndicator size="small" color={colors.textMuted} />
@@ -418,6 +442,7 @@ export default function AddScreen() {
           </>
         )}
       </View>
+      )}
 
       {drafts ? (
         <View style={[styles.totalBar, { bottom: (insets.bottom || space.lg) + 68 }]}>
