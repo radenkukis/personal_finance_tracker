@@ -12,10 +12,13 @@ import {
   CHAT_SCHEMA_GEMINI,
   buildChatSystemPrompt,
   buildInsightSystemPrompt,
+  buildKeywordsPrompt,
+  KEYWORDS_SCHEMA,
   TRANSACTION_SCHEMA,
   type ChatResult,
   type ParsedTx,
   type PromptContext,
+  type KeywordRequest,
   type UserVoice,
 } from './prompts.ts';
 
@@ -226,4 +229,35 @@ function textOf(response: { content: unknown[] }): string {
 /** Claude tidak menerima input audio — voice memakai provider STT terpisah. */
 export function claudeSupportsAudio(): boolean {
   return false;
+}
+
+// ---------------------------------------------------------------------
+// Usulan kata kunci
+// ---------------------------------------------------------------------
+
+export async function claudeKeywords(
+  req: KeywordRequest,
+  voice: UserVoice,
+): Promise<string[]> {
+  const response = await client().messages.create({
+    model: MODEL_PARSE,
+    max_tokens: 1024,
+    tools: [
+      {
+        name: 'kata_kunci',
+        description: 'Mengembalikan kata kunci untuk kategori ini.',
+        input_schema: KEYWORDS_SCHEMA as unknown as Record<string, unknown>,
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'kata_kunci' },
+    messages: [{ role: 'user', content: buildKeywordsPrompt(req, voice) }],
+  });
+
+  for (const block of response.content) {
+    if (block.type === 'tool_use') {
+      const input = block.input as { keywords?: string[] };
+      return input.keywords ?? [];
+    }
+  }
+  return [];
 }

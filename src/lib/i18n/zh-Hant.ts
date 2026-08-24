@@ -284,6 +284,10 @@ export const zhHant: Dictionary = {
     deleteBodyUnused: '還沒有交易使用這個分類。',
     nameEmpty: '分類名稱不能空白。',
     duplicate: '分類「{name}」已存在。',
+    suggestKeywords: '推薦關鍵詞',
+    suggestionsTitle: '點擊新增',
+    keywordTaken: '已在「{category}」—— 將移到這裡',
+    noSuggestions: '暫無推薦。請嘗試更明確的分類名稱。',
   },
 
   currencyPicker: {

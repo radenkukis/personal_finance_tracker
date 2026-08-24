@@ -9,7 +9,13 @@
  *   supabase secrets set LLM_PROVIDER=claude ANTHROPIC_API_KEY=...
  */
 import { HttpError } from './http.ts';
-import type { ChatResult, ParsedTx, PromptContext, UserVoice } from './prompts.ts';
+import type {
+  ChatResult,
+  KeywordRequest,
+  ParsedTx,
+  PromptContext,
+  UserVoice,
+} from './prompts.ts';
 /*
  * Claude dimuat saat dipakai saja, bukan lewat impor statis.
  *
@@ -19,7 +25,13 @@ import type { ChatResult, ParsedTx, PromptContext, UserVoice } from './prompts.t
  * semua orang, untuk kode yang tidak dijalankan.
  */
 const claude = () => import('./claude.ts');
-import { geminiChat, geminiInsight, geminiParse, geminiTranscribe } from './gemini.ts';
+import {
+  geminiChat,
+  geminiInsight,
+  geminiKeywords,
+  geminiParse,
+  geminiTranscribe,
+} from './gemini.ts';
 import { groqTranscribe } from './groq.ts';
 
 export type LlmProvider = 'local' | 'gemini' | 'claude';
@@ -66,6 +78,14 @@ export async function chat(
 ): Promise<ChatResult> {
   if (requireRemote() !== 'claude') return await geminiChat(question, dataSummary, history, voice);
   return await (await claude()).claudeChat(question, dataSummary, history, voice);
+}
+
+export async function suggestKeywords(
+  req: KeywordRequest,
+  voice: UserVoice,
+): Promise<string[]> {
+  if (requireRemote() !== 'claude') return await geminiKeywords(req, voice);
+  return await (await claude()).claudeKeywords(req, voice);
 }
 
 export async function insight(findingsJson: string, voice: UserVoice): Promise<string> {

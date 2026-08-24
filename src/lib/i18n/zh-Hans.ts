@@ -284,6 +284,10 @@ export const zhHans: Dictionary = {
     deleteBodyUnused: '还没有交易使用这个分类。',
     nameEmpty: '分类名称不能为空。',
     duplicate: '分类“{name}”已存在。',
+    suggestKeywords: '推荐关键词',
+    suggestionsTitle: '点击添加',
+    keywordTaken: '已在“{category}”—— 将移到这里',
+    noSuggestions: '暂无推荐。请尝试更明确的分类名称。',
   },
 
   currencyPicker: {

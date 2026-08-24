@@ -286,6 +286,10 @@ export const ko: Dictionary = {
     deleteBodyUnused: '아직 이 분류를 사용하는 거래가 없습니다.',
     nameEmpty: '분류 이름은 비워 둘 수 없습니다.',
     duplicate: '분류 “{name}”은(는) 이미 있습니다.',
+    suggestKeywords: '키워드 제안받기',
+    suggestionsTitle: '탭해서 추가',
+    keywordTaken: '“{category}”에 있음 — 여기로 옴김',
+    noSuggestions: '제안이 없습니다. 더 명확한 카테고리 이름을 써 보세요.',
   },
 
   currencyPicker: {

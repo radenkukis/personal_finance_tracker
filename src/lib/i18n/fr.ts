@@ -288,6 +288,10 @@ export const fr: Dictionary = {
     deleteBodyUnused: 'Aucune transaction n’utilise encore cette catégorie.',
     nameEmpty: 'Le nom de la catégorie ne peut pas être vide.',
     duplicate: 'La catégorie « {name} » existe déjà.',
+    suggestKeywords: 'Suggérer des mots-clés',
+    suggestionsTitle: 'Touchez pour ajouter',
+    keywordTaken: 'dans {category} — sera déplacé ici',
+    noSuggestions: 'Aucune suggestion. Essayez un nom de catégorie plus clair.',
   },
 
   currencyPicker: {

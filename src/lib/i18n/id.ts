@@ -288,6 +288,10 @@ export const id: Dictionary = {
     deleteBodyUnused: 'Belum ada transaksi yang memakai kategori ini.',
     nameEmpty: 'Nama kategori tidak boleh kosong.',
     duplicate: 'Kategori “{name}” sudah ada.',
+    suggestKeywords: 'Usulkan kata kunci',
+    suggestionsTitle: 'Ketuk untuk menambahkan',
+    keywordTaken: 'ada di {category} — akan dipindahkan ke sini',
+    noSuggestions: 'Belum ada usulan. Coba nama kategori yang lebih jelas.',
   },
 
   currencyPicker: {

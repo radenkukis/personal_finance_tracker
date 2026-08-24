@@ -387,3 +387,82 @@ export function buildInsightSystemPrompt(v: UserVoice): string {
   `- Tulis nominal dalam mata uang ${v.currency}.`,
   ].join('\n');
 }
+
+// ---------------------------------------------------------------------
+// Usulan kata kunci kategori
+// ---------------------------------------------------------------------
+
+export interface KeywordRequest {
+  name: string;
+  kind: 'expense' | 'income';
+  /** Kategori lain yang sejenis, supaya usulannya tidak tumpang tindih. */
+  siblings: string[];
+  /** Kata kunci yang sudah dipakai kategori lain — jangan diusulkan lagi. */
+  taken: string[];
+}
+
+export const KEYWORDS_SCHEMA_GEMINI = {
+  type: 'OBJECT',
+  properties: {
+    keywords: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['keywords'],
+};
+
+export const KEYWORDS_SCHEMA = {
+  type: 'object',
+  properties: {
+    keywords: {
+      type: 'array',
+      description: 'Kata kunci untuk kategori ini.',
+      items: { type: 'string' },
+    },
+  },
+  required: ['keywords'],
+  additionalProperties: false,
+} as const;
+
+export function buildKeywordsPrompt(req: KeywordRequest, v: UserVoice): string {
+  const lines = [
+    'Kamu membantu menyiapkan kata kunci untuk sebuah kategori pengeluaran.',
+    '',
+    ...languageRules(v),
+    'APA ITU KATA KUNCI DI SINI:',
+    '- Kata yang biasa DITULIS ORANG saat mencatat pengeluaran sehari-hari,',
+    '  bukan istilah resmi atau nama kategori akuntansi.',
+    '- Aplikasi mencocokkan kata ini dengan catatan user untuk menebak kategorinya',
+    '  tanpa memanggil AI. Makin dekat dengan cara orang menulis, makin sering',
+    '  catatannya terbaca seketika.',
+    '',
+    'ATURAN:',
+    '- Beri 12 sampai 20 kata kunci.',
+    '- Huruf kecil semua.',
+    '- Satu kata, atau dua kata bila memang lazim ditulis begitu.',
+    '- Sertakan nama merek dan tempat yang umum di negara pengguna bahasa ini —',
+    '  justru itu yang paling sering diketik orang.',
+    '- JANGAN memakai angka, satuan nominal, atau kata waktu.',
+    '- JANGAN mengulang kata yang sudah dipakai kategori lain (daftar di bawah).',
+    '- JANGAN memakai kata yang terlalu umum sehingga cocok untuk apa saja',
+    '  ("bayar", "beli", "biaya").',
+    '',
+    `KATEGORI: ${req.name} (${req.kind === 'income' ? 'pemasukan' : 'pengeluaran'})`,
+  ];
+
+  if (req.siblings.length > 0) {
+    lines.push(
+      '',
+      'KATEGORI LAIN YANG SUDAH ADA — usulanmu harus jelas berbeda dari ini:',
+      req.siblings.join(', ') + '.',
+    );
+  }
+
+  if (req.taken.length > 0) {
+    lines.push(
+      '',
+      'KATA YANG SUDAH DIPAKAI KATEGORI LAIN — jangan diusulkan:',
+      req.taken.slice(0, 150).join(', ') + '.',
+    );
+  }
+
+  return lines.join('\n');
+}

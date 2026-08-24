@@ -295,6 +295,10 @@ export const en: Dictionary = {
     deleteBodyUnused: 'No transactions use this category yet.',
     nameEmpty: 'Category name cannot be empty.',
     duplicate: 'Category “{name}” already exists.',
+    suggestKeywords: 'Suggest keywords',
+    suggestionsTitle: 'Tap to add',
+    keywordTaken: 'in {category} — will be moved here',
+    noSuggestions: 'No suggestions this time. Try a clearer category name.',
   },
 
   currencyPicker: {

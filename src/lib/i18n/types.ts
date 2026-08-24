@@ -328,6 +328,10 @@ export interface Dictionary {
     deleteBodyUnused: string;
     nameEmpty: string;
     duplicate: string;
+    suggestKeywords: string;
+    suggestionsTitle: string;
+    keywordTaken: string;
+    noSuggestions: string;
   };
 
   currencyPicker: {

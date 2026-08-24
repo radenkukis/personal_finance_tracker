@@ -287,6 +287,10 @@ export const ja: Dictionary = {
     deleteBodyUnused: 'このカテゴリを使っている取引はまだありません。',
     nameEmpty: 'カテゴリ名は空にできません。',
     duplicate: 'カテゴリ「{name}」はすでに存在します。',
+    suggestKeywords: 'キーワードを提案',
+    suggestionsTitle: 'タップして追加',
+    keywordTaken: '「{category}」にあります — こちらに移します',
+    noSuggestions: '提案はありませんでした。もっと分かりやすい名前をお試しください。',
   },
 
   currencyPicker: {

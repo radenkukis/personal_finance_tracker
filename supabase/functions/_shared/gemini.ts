@@ -14,9 +14,12 @@ import {
   CHAT_SCHEMA_GEMINI,
   buildChatSystemPrompt,
   buildInsightSystemPrompt,
+  buildKeywordsPrompt,
+  KEYWORDS_SCHEMA_GEMINI,
   type ChatResult,
   type ParsedTx,
   type PromptContext,
+  type KeywordRequest,
   type UserVoice,
 } from './prompts.ts';
 
@@ -210,4 +213,32 @@ export async function geminiTranscribe(audioBase64: string, mimeType: string): P
     }],
     generationConfig: { temperature: 0 },
   });
+}
+
+// ---------------------------------------------------------------------
+// Usulan kata kunci
+// ---------------------------------------------------------------------
+
+export async function geminiKeywords(
+  req: KeywordRequest,
+  voice: UserVoice,
+): Promise<string[]> {
+  const raw = await call({
+    contents: [{ role: 'user', parts: [{ text: buildKeywordsPrompt(req, voice) }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: KEYWORDS_SCHEMA_GEMINI,
+      temperature: 0.3,
+      // Menyusun daftar kata bukan tugas menalar; menunggu lebih lama di sini
+      // hanya membuat tombolnya terasa berat.
+      thinkingConfig: { thinkingLevel: 'minimal' },
+    },
+  }, parseModel());
+
+  try {
+    const parsed = JSON.parse(raw) as { keywords?: string[] };
+    return parsed.keywords ?? [];
+  } catch {
+    return [];
+  }
 }

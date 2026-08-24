@@ -288,6 +288,10 @@ export const de: Dictionary = {
     deleteBodyUnused: 'Noch keine Buchung nutzt diese Kategorie.',
     nameEmpty: 'Der Name der Kategorie darf nicht leer sein.',
     duplicate: 'Die Kategorie „{name}“ gibt es bereits.',
+    suggestKeywords: 'Schlüsselwörter vorschlagen',
+    suggestionsTitle: 'Zum Hinzufügen tippen',
+    keywordTaken: 'in {category} — wird hierher verschoben',
+    noSuggestions: 'Keine Vorschläge. Versuche einen klareren Kategorienamen.',
   },
 
   currencyPicker: {

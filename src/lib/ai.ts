@@ -10,7 +10,7 @@ import { callFunction } from '@/lib/supabase';
 import { parseLocal, type ParserOptions } from '@/lib/localParser';
 import { hasLargeDenomination } from '@/lib/currency';
 import { PARSER_LOCALES, type Locale } from '@/lib/i18n';
-import type { Account, Category, DraftTransaction, TxSource } from '@/types/db';
+import type { Account, Category, DraftTransaction, TxKind, TxSource } from '@/types/db';
 import type { Finding } from '@/analytics/detectors';
 import { en, interpolate, type Dictionary } from '@/lib/i18n';
 
@@ -227,4 +227,22 @@ export async function summarizeFindings(findings: readonly Finding[]): Promise<s
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : en.common.unknownError;
+}
+
+/**
+ * Meminta usulan kata kunci untuk sebuah kategori.
+ *
+ * Dipanggil hanya saat user menekan tombolnya. Kata kunci menentukan apa yang
+ * bisa dikenali tanpa AI, jadi satu panggilan di sini menukar dirinya sendiri
+ * dengan pengenalan gratis untuk catatan-catatan berikutnya.
+ */
+export async function suggestKeywords(
+  categoryName: string,
+  kind: TxKind,
+): Promise<string[]> {
+  const result = await callFunction<{ keywords: string[] }>('ai-keywords', {
+    categoryName,
+    kind,
+  });
+  return result.keywords ?? [];
 }

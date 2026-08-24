@@ -15,6 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, size, space } from '@/lib/theme';
 import { CATEGORY_COLORS, categoryLabel } from '@/lib/categories';
+import { aiMode, suggestKeywords } from '@/lib/ai';
 import { useData } from '@/store/data';
 import { useT } from '@/hooks/useT';
 import type { Dictionary } from '@/lib/i18n';
@@ -64,6 +65,32 @@ export default function KategoriScreen() {
       );
     },
     [countTransactionsIn, deleteCategory, d, fill],
+  );
+
+  /**
+   * Memindahkan kata kunci dari kategori lama ke yang baru.
+   *
+   * Membiarkan satu kata menempel di dua kategori bukan pilihan: pemenangnya
+   * ditentukan panjang kata, lalu urutan di daftar. Diam-diam dan sembarang.
+   */
+  const moveKeywords = useCallback(
+    async (moves: readonly { fromId: string; keyword: string }[]) => {
+      const byCategory = new Map<string, Set<string>>();
+      for (const m of moves) {
+        const set = byCategory.get(m.fromId) ?? new Set<string>();
+        set.add(m.keyword);
+        byCategory.set(m.fromId, set);
+      }
+
+      for (const [id, words] of byCategory) {
+        const source = categories.find((c) => c.id === id);
+        if (!source) continue;
+        await updateCategory(id, {
+          keywords: source.keywords.filter((k) => !words.has(k.toLowerCase())),
+        });
+      }
+    },
+    [categories, updateCategory],
   );
 
   return (
@@ -120,6 +147,8 @@ export default function KategoriScreen() {
       {editing ? (
         <CategoryEditor
           initial={editing}
+          siblings={categories}
+          onMove={moveKeywords}
           onClose={() => setEditing(null)}
           onSave={async (patch) => {
             await updateCategory(editing.id, patch);
@@ -135,7 +164,15 @@ export default function KategoriScreen() {
 
       {creatingKind ? (
         <CategoryEditor
-          initial={{ name: '', kind: creatingKind, color: CATEGORY_COLORS[0], keywords: [] }}
+          initial={{
+            name: '',
+            kind: creatingKind,
+            color: CATEGORY_COLORS[0],
+            keywords: [],
+            slug: null,
+          }}
+          siblings={categories}
+          onMove={moveKeywords}
           onClose={() => setCreatingKind(null)}
           onSave={async (patch) => {
             await createCategory({
@@ -244,11 +281,17 @@ function CategoryGroup({
 
 function CategoryEditor({
   initial,
+  siblings,
+  onMove,
   onSave,
   onClose,
   onDelete,
 }: {
-  initial: Pick<Category, 'name' | 'kind' | 'color' | 'keywords'>;
+  initial: Pick<Category, 'name' | 'kind' | 'color' | 'keywords' | 'slug'>;
+  /** Semua kategori, untuk mengetahui kata kunci mana yang sudah ada pemiliknya. */
+  siblings: readonly Category[];
+  /** Melepaskan kata kunci dari kategori lama sebelum dipakai di sini. */
+  onMove: (moves: readonly { fromId: string; keyword: string }[]) => Promise<void>;
   onSave: (patch: Partial<Category>) => Promise<void>;
   onClose: () => void;
   /** Tidak ada saat membuat kategori baru — belum ada yang bisa dihapus. */
@@ -265,6 +308,49 @@ function CategoryEditor({
   const [color, setColor] = useState(initial.color);
   const [keywords, setKeywords] = useState<string[]>([...initial.keywords]);
   const [draftKeyword, setDraftKeyword] = useState('');
+  const [suggestions, setSuggestions] = useState<string[] | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  /** Kata kunci yang diambil dari kategori lain, dilepas saat disimpan. */
+  const [moves, setMoves] = useState<{ fromId: string; keyword: string }[]>([]);
+
+  const remote = aiMode() === 'remote';
+
+  /** Kategori lain sejenis yang sudah memakai kata ini, bila ada. */
+  const ownerOf = useCallback(
+    (word: string) =>
+      siblings.find(
+        (c) =>
+          c.kind === initial.kind &&
+          c.name !== initial.name &&
+          c.keywords.some((k) => k.toLowerCase() === word),
+      ) ?? null,
+    [siblings, initial.kind, initial.name],
+  );
+
+  const askForKeywords = useCallback(async () => {
+    const subject = name.trim();
+    if (!subject) return;
+    setSuggesting(true);
+    setError(null);
+    try {
+      const got = await suggestKeywords(subject, initial.kind);
+      setSuggestions(got.map((k) => k.toLowerCase().trim()).filter(Boolean));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : d.settings.saveFailed);
+    } finally {
+      setSuggesting(false);
+    }
+  }, [name, initial.kind, d]);
+
+  const takeSuggestion = useCallback(
+    (word: string) => {
+      const owner = ownerOf(word);
+      if (owner) setMoves((prev) => [...prev, { fromId: owner.id, keyword: word }]);
+      setKeywords((prev) => (prev.includes(word) ? prev : [...prev, word]));
+      setSuggestions((prev) => prev?.filter((w) => w !== word) ?? null);
+    },
+    [ownerOf],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -361,6 +447,73 @@ function CategoryEditor({
             />
           </View>
 
+          {/*
+            Kata kunci menentukan apa yang bisa dikenali tanpa AI. Satu
+            panggilan di sini menukar dirinya sendiri dengan pengenalan gratis
+            untuk catatan-catatan berikutnya — karena itu tombolnya ada, dan
+            karena itu pula ia tidak berjalan otomatis.
+          */}
+          {remote ? (
+            <Button
+              title={d.categories.suggestKeywords}
+              variant="secondary"
+              icon="cpu"
+              full
+              loading={suggesting}
+              disabled={!name.trim()}
+              style={{ marginTop: space.sm }}
+              onPress={askForKeywords}
+            />
+          ) : null}
+
+          {suggestions ? (
+            suggestions.length === 0 ? (
+              <Txt variant="caption" color={colors.textFaint} style={{ marginTop: space.sm }}>
+                {d.categories.noSuggestions}
+              </Txt>
+            ) : (
+              <View style={{ marginTop: space.md }}>
+                <Txt variant="overline" color={colors.textFaint}>
+                  {d.categories.suggestionsTitle}
+                </Txt>
+                <View style={styles.keywordBox}>
+                  {suggestions.map((w) => {
+                    const owner = ownerOf(w);
+                    return (
+                      <Pressable
+                        key={w}
+                        onPress={() => takeSuggestion(w)}
+                        accessibilityLabel={w}
+                        style={[
+                          styles.keywordChip,
+                          {
+                            backgroundColor: colors.surfaceRaised,
+                            borderWidth: 1,
+                            borderColor: owner ? colors.warning : colors.hairlineStrong,
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name="plus"
+                          size={10}
+                          color={owner ? colors.warning : colors.textMuted}
+                        />
+                        <Txt variant="caption" color={owner ? colors.warning : colors.textMuted}>
+                          {w}
+                        </Txt>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {suggestions.some((w) => ownerOf(w)) ? (
+                  <Txt variant="caption" color={colors.warning} style={{ lineHeight: 16 }}>
+                    {fillTaken(d, suggestions, ownerOf, d.categoryNames)}
+                  </Txt>
+                ) : null}
+              </View>
+            )
+          ) : null}
+
           {error ? (
             <Txt variant="caption" color={colors.expense} style={{ marginTop: space.sm }}>
               {error}
@@ -402,6 +555,7 @@ function CategoryEditor({
                    * bahasa aktif ke database — slug-nya lepas, dan kategori
                    * itu berhenti mengikuti bahasa selamanya.
                    */
+                  if (moves.length > 0) await onMove(moves);
                   await onSave(
                     name === shownName ? { color, keywords } : { name, color, keywords },
                   );
@@ -486,3 +640,23 @@ const styles = {
     borderRadius: radius.pill,
   },
 };
+
+/**
+ * Menyebutkan kategori mana saja yang kata kuncinya akan dipindahkan.
+ *
+ * Disatukan menjadi satu kalimat, bukan satu baris per chip: yang perlu
+ * diketahui user adalah bahwa perpindahan akan terjadi, bukan daftar panjang.
+ */
+function fillTaken(
+  d: Dictionary,
+  words: readonly string[],
+  ownerOf: (w: string) => Category | null,
+  names: Dictionary['categoryNames'],
+): string {
+  const owners = new Set<string>();
+  for (const w of words) {
+    const o = ownerOf(w);
+    if (o) owners.add(categoryLabel(o, names));
+  }
+  return d.categories.keywordTaken.replace('{category}', [...owners].join(', '));
+}
