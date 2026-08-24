@@ -47,6 +47,13 @@ export interface ParseOutcome {
   usedAI: boolean;
   /** Diisi bila ada bagian yang tidak terurai dan AI tidak tersedia. */
   warning: string | null;
+  /**
+   * Rincian waktu, dalam milidetik. Ada supaya pertanyaan "kenapa lama"
+   * dijawab angka, bukan tebakan: totalMs diukur di HP, dbMs dan aiMs
+   * dilaporkan Edge Function sendiri. Selisih totalMs dengan keduanya adalah
+   * jaringan ditambah waktu bangun fungsi.
+   */
+  timing: { totalMs: number; dbMs?: number; aiMs?: number };
 }
 
 interface RemoteTx {
@@ -70,6 +77,7 @@ export async function smartParse(
   d: Dictionary = en,
   reader: ReaderSettings = { locale: 'en', currency: 'IDR' },
 ): Promise<ParseOutcome> {
+  const startedAt = Date.now();
   const local = parseLocal(text, categories, accounts, new Date(), source, parserOptions(reader));
 
   /*
@@ -86,7 +94,12 @@ export async function smartParse(
   const missingCategory = local.drafts.some((d) => d.category_name === null);
 
   if (!local.needsAI && !missingCategory) {
-    return { drafts: local.drafts, usedAI: false, warning: null };
+    return {
+      drafts: local.drafts,
+      usedAI: false,
+      warning: null,
+      timing: { totalMs: Date.now() - startedAt },
+    };
   }
 
   if (aiMode() === 'local') {
@@ -99,14 +112,22 @@ export async function smartParse(
         ? interpolate(d.add.partiallyParsed, { parts: local.unparsed.join('; ') })
         : d.add.freeModeUnreadable;
 
-    return { drafts: local.drafts, usedAI: false, warning };
+    return {
+      drafts: local.drafts,
+      usedAI: false,
+      warning,
+      timing: { totalMs: Date.now() - startedAt },
+    };
   }
 
   try {
     // Teks utuh yang dikirim, bukan hanya potongan yang gagal — kata waktu
     // di awal kalimat ("kemarin ...") ikut menentukan seluruh potongan, dan
     // konteks itu hilang kalau dipotong-potong.
-    const result = await callFunction<{ transactions: RemoteTx[] }>('ai-parse', {
+    const result = await callFunction<{
+      transactions: RemoteTx[];
+      timing?: { dbMs: number; aiMs: number };
+    }>('ai-parse', {
       text,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
@@ -125,12 +146,22 @@ export async function smartParse(
       raw_input: text,
     }));
 
-    return { drafts, usedAI: true, warning: null };
+    return {
+      drafts,
+      usedAI: true,
+      warning: null,
+      timing: {
+        totalMs: Date.now() - startedAt,
+        dbMs: result.timing?.dbMs,
+        aiMs: result.timing?.aiMs,
+      },
+    };
   } catch (e) {
     // AI gagal bukan alasan kehilangan yang sudah berhasil diurai lokal.
     return {
       drafts: local.drafts,
       usedAI: false,
+      timing: { totalMs: Date.now() - startedAt },
       warning:
         local.drafts.length > 0
           ? interpolate(d.add.aiUnreachablePartial, { error: messageOf(e) })

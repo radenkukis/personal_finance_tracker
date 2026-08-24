@@ -26,7 +26,7 @@ import { File } from 'expo-file-system';
 import { Button, Card, Txt, withAlpha } from '@/components/ui';
 import { DraftReviewSheet } from '@/components/DraftReviewSheet';
 import { colors, radius, size, space, type } from '@/lib/theme';
-import { aiMode, smartParse, transcribeAudio } from '@/lib/ai';
+import { aiMode, smartParse, transcribeAudio, type ParseOutcome } from '@/lib/ai';
 import { useData } from '@/store/data';
 import { useT } from '@/hooks/useT';
 import { useMoney } from '@/hooks/useMoney';
@@ -94,6 +94,7 @@ export default function AddScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [usedAI, setUsedAI] = useState(false);
+  const [timing, setTiming] = useState<ParseOutcome['timing'] | null>(null);
 
   const recorder = useAudioRecorder(PRESET_SUARA);
   /*
@@ -129,6 +130,7 @@ export default function AddScreen() {
         }
         setDrafts(outcome.drafts);
         setUsedAI(outcome.usedAI);
+        setTiming(outcome.timing);
         setStatus(outcome.warning);
       } catch (e) {
         setError(e instanceof Error ? e.message : d.add.parseFailed);
@@ -273,6 +275,9 @@ export default function AddScreen() {
                 label={fill(d.add.transactionCount, { count: drafts.length })}
                 color={colors.textMuted}
               />
+              {timing ? (
+                <Badge icon="clock" label={timingLabel(timing)} color={colors.textFaint} />
+              ) : null}
             </View>
 
             <DraftReviewSheet
@@ -460,6 +465,17 @@ export default function AddScreen() {
   );
 }
 
+/**
+ * "1,2 dtk" untuk jalur gratis, "18,4 dtk · AI 17,9" saat model dipanggil.
+ * Sengaja terlihat di layar, bukan hanya di console: pengujian sesungguhnya
+ * terjadi di HP, tempat console tidak pernah dibuka.
+ */
+function timingLabel(t: ParseOutcome['timing']): string {
+  const s = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + ' dtk';
+  if (t.aiMs === undefined) return s(t.totalMs);
+  return `${s(t.totalMs)} · AI ${s(t.aiMs)}`;
+}
+
 function Badge({
   icon,
   label,
@@ -528,7 +544,7 @@ const styles = {
     borderWidth: 1,
     borderColor: colors.hairline,
   },
-  badgeRow: { flexDirection: 'row' as const, gap: 6 },
+  badgeRow: { flexDirection: 'row' as const, gap: 6, flexWrap: 'wrap' as const },
   badge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

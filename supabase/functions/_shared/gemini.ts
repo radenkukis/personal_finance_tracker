@@ -110,10 +110,15 @@ export async function geminiParse(text: string, ctx: PromptContext): Promise<Par
       responseMimeType: 'application/json',
       responseSchema: GEMINI_TX_SCHEMA,
       temperature: 0,
-      // Mengurai kalimat menjadi kolom-kolom adalah tugas mekanis, bukan tugas
-      // menalar. Membiarkan model "berpikir" dulu menambah belasan detik tanpa
-      // membuat hasilnya lebih benar — dan input harian harus terasa instan.
-      thinkingConfig: { thinkingLevel: 'low' },
+      /*
+       * Mengurai kalimat menjadi kolom-kolom adalah tugas mekanis, bukan tugas
+       * menalar. Membiarkan model "berpikir" dulu menambah belasan detik tanpa
+       * membuat hasilnya lebih benar — dan input harian harus terasa instan.
+       *
+       * 'minimal' adalah setelan terendah yang ada; keluarga Gemini 3 tidak
+       * mengizinkan mematikan penalaran sepenuhnya, dan bawaannya 'medium'.
+       */
+      thinkingConfig: { thinkingLevel: 'minimal' },
     },
   }, parseModel());
 

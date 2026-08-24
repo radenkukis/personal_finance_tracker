@@ -10,7 +10,15 @@
  */
 import { HttpError } from './http.ts';
 import type { ChatResult, ParsedTx, PromptContext, UserVoice } from './prompts.ts';
-import { claudeChat, claudeInsight, claudeParse } from './claude.ts';
+/*
+ * Claude dimuat saat dipakai saja, bukan lewat impor statis.
+ *
+ * claude.ts menarik SDK Anthropic dari npm. Dengan impor statis, SDK itu ikut
+ * dimuat setiap kali fungsi bangun dingin — termasuk pada jalur Gemini yang
+ * tidak menyentuhnya sama sekali. Biayanya dibayar setiap dingin-start, oleh
+ * semua orang, untuk kode yang tidak dijalankan.
+ */
+const claude = () => import('./claude.ts');
 import { geminiChat, geminiInsight, geminiParse, geminiTranscribe } from './gemini.ts';
 import { groqTranscribe } from './groq.ts';
 
@@ -46,7 +54,8 @@ function requireRemote(): Exclude<LlmProvider, 'local'> {
 }
 
 export async function parseText(text: string, ctx: PromptContext): Promise<ParsedTx[]> {
-  return requireRemote() === 'claude' ? await claudeParse(text, ctx) : await geminiParse(text, ctx);
+  if (requireRemote() !== 'claude') return await geminiParse(text, ctx);
+  return await (await claude()).claudeParse(text, ctx);
 }
 
 export async function chat(
@@ -55,15 +64,13 @@ export async function chat(
   history: { role: 'user' | 'assistant'; content: string }[],
   voice: UserVoice,
 ): Promise<ChatResult> {
-  return requireRemote() === 'claude'
-    ? await claudeChat(question, dataSummary, history, voice)
-    : await geminiChat(question, dataSummary, history, voice);
+  if (requireRemote() !== 'claude') return await geminiChat(question, dataSummary, history, voice);
+  return await (await claude()).claudeChat(question, dataSummary, history, voice);
 }
 
 export async function insight(findingsJson: string, voice: UserVoice): Promise<string> {
-  return requireRemote() === 'claude'
-    ? await claudeInsight(findingsJson, voice)
-    : await geminiInsight(findingsJson, voice);
+  if (requireRemote() !== 'claude') return await geminiInsight(findingsJson, voice);
+  return await (await claude()).claudeInsight(findingsJson, voice);
 }
 
 /**
