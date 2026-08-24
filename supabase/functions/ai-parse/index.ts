@@ -10,11 +10,18 @@ import { fail, json, serveAuthed } from '../_shared/http.ts';
 import { llmProvider, parseText } from '../_shared/providers.ts';
 import type { PromptContext } from '../_shared/prompts.ts';
 import { readVoice } from '../_shared/voice.ts';
+import { shownCategoryName } from '../_shared/categoryNames.ts';
 
 /** Batas panjang input: menjaga biaya dan menghalangi penyalahgunaan. */
 const MAX_INPUT_CHARS = 1_000;
 
 /** Ukuran prompt ikut dilaporkan — penyebab lambat paling sering di sini. */
+interface CategoryRow {
+  name: string;
+  kind: string;
+  slug: string | null;
+}
+
 function buildSize(ctx: PromptContext): number {
   return (
     ctx.categories.length * 20 +
@@ -35,7 +42,7 @@ Deno.serve(serveAuthed(async (req, ctx) => {
 
   const tDb = Date.now();
   const [categories, accounts, corrections, merchants, voice] = await Promise.all([
-    ctx.db.from('categories').select('name, kind').order('sort_order'),
+    ctx.db.from('categories').select('name, kind, slug').order('sort_order'),
     ctx.db.from('accounts').select('name').eq('is_archived', false),
     // Koreksi terbaru dipakai sebagai contoh few-shot supaya tebakan
     // kategori makin mengikuti kebiasaan user ini.
@@ -70,7 +77,15 @@ Deno.serve(serveAuthed(async (req, ctx) => {
 
   const promptContext: PromptContext = {
     ...voice,
-    categories: categories.data ?? [],
+    /*
+     * Nama kategori dikirim dalam bahasa user, bukan sebagaimana tersimpan.
+     * Model lalu menjawab memakai nama yang benar-benar dilihat user di
+     * layar, dan aplikasi memetakannya kembali ke baris aslinya lewat slug.
+     */
+    categories: ((categories.data ?? []) as CategoryRow[]).map((c) => ({
+      name: shownCategoryName(c, voice.language),
+      kind: c.kind,
+    })),
     accounts: (accounts.data ?? []).map((a: { name: string }) => a.name),
     corrections: corrections.data ?? [],
     knownMerchants,

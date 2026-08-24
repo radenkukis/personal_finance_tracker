@@ -19,6 +19,7 @@ function cat(name: string, keywords: string[], kind: 'expense' | 'income' = 'exp
     color: '#fff',
     keywords,
     sort_order: 1,
+    slug: null,
   };
 }
 

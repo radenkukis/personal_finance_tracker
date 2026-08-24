@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useData } from '@/store/data';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
+import { categoryLabel } from '@/lib/categories';
 import {
   computeBalance,
   dailySeries,
@@ -96,11 +97,18 @@ export function useDashboard(now: Date = new Date()): DashboardData {
 
     const safe = safeToSpend(balance, reserved, now);
 
-    const slices: Slice[] = [...spentByCategory.entries()].map(([label, value]) => ({
-      label,
-      value,
-      color: monthExpenses.find((t) => t.category?.name === label)?.category?.color ?? '#8A97A6',
-    }));
+    /*
+      * Kunci peta tetap nama tersimpan — itu yang dipakai mencocokkan budget.
+      * Yang diterjemahkan hanya label yang tampil di donat.
+      */
+    const slices: Slice[] = [...spentByCategory.entries()].map(([name, value]) => {
+      const row = monthExpenses.find((t) => t.category?.name === name)?.category;
+      return {
+        label: row ? categoryLabel(row, d.categoryNames) : name,
+        value,
+        color: row?.color ?? '#8A97A6',
+      };
+    });
 
     const points: TxPoint[] = transactions.map((t) => ({
       id: t.id,
@@ -116,7 +124,15 @@ export function useDashboard(now: Date = new Date()): DashboardData {
       budgets.map((b) => ({ category_name: b.category_name, amount: Number(b.amount) })),
       spentByCategory,
       now,
-      { money, compact, text: d.findings },
+      {
+        money,
+        compact,
+        text: d.findings,
+        label: (name) => {
+          const row = transactions.find((t) => t.category?.name === name)?.category;
+          return row ? categoryLabel(row, d.categoryNames) : name;
+        },
+      },
     );
 
     return {

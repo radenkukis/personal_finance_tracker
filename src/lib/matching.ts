@@ -14,6 +14,7 @@ interface NamedCategory {
   id: string;
   name: string;
   kind: TxKind;
+  slug?: string | null;
 }
 
 interface NamedAccount {
@@ -22,30 +23,53 @@ interface NamedAccount {
 }
 
 /**
- * Nama kategori -> id. Bila tidak ketemu sama sekali, jatuh ke "Lainnya"
- * daripada menyimpan transaksi tanpa kategori — kategori yang salah masih
- * bisa dibetulkan user, sedangkan yang kosong menghilang dari semua grafik.
+ * Nama kategori -> id. Bila tidak ketemu sama sekali, jatuh ke kategori
+ * cadangan daripada menyimpan transaksi tanpa kategori — kategori yang salah
+ * masih bisa dibetulkan user, sedangkan yang kosong menghilang dari semua
+ * grafik.
+ *
+ * `labels` berisi nama versi bahasa aktif. Diperlukan karena AI menjawab
+ * memakai nama yang dilihat user, bukan nama yang tersimpan.
  */
 export function matchCategoryId(
   categories: readonly NamedCategory[],
   name: string | null,
   kind: TxKind,
+  labels?: Record<string, string>,
 ): string | null {
   const pool = categories.filter((c) => c.kind === kind);
   if (pool.length === 0) return null;
 
   if (name) {
     const needle = name.toLowerCase().trim();
-    const exact = pool.find((c) => c.name.toLowerCase() === needle);
+    const shown = (c: NamedCategory) =>
+      (c.slug && labels?.[c.slug] ? labels[c.slug]! : c.name).toLowerCase();
+
+    const exact = pool.find((c) => c.name.toLowerCase() === needle || shown(c) === needle);
     if (exact) return exact.id;
 
-    const partial = pool.find(
-      (c) => c.name.toLowerCase().includes(needle) || needle.includes(c.name.toLowerCase()),
-    );
+    const partial = pool.find((c) => {
+      const stored = c.name.toLowerCase();
+      const label = shown(c);
+      return (
+        stored.includes(needle) || needle.includes(stored) ||
+        label.includes(needle) || needle.includes(label)
+      );
+    });
     if (partial) return partial.id;
   }
 
-  return pool.find((c) => c.name === 'Lainnya')?.id ?? null;
+  /*
+   * Cadangan dicari lewat slug, bukan lewat nama "Lainnya". Sejak kategori
+   * bawaan disemai per bahasa, akun berbahasa Inggris tidak punya baris
+   * bernama "Lainnya" — dan pencarian berdasarkan nama diam-diam gagal,
+   * menyisakan transaksi tanpa kategori.
+   */
+  return (
+    pool.find((c) => c.slug === 'other' || c.slug === 'other_income')?.id ??
+    pool.find((c) => c.name === 'Lainnya')?.id ??
+    null
+  );
 }
 
 /**

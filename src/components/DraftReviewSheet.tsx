@@ -21,7 +21,7 @@ import { colors, radius, space, type } from '@/lib/theme';
 import { clockTime } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
-import { sameCategoryName } from '@/lib/categories';
+import { categoryLabel, sameCategoryName } from '@/lib/categories';
 import type { Category, DraftTransaction } from '@/types/db';
 
 const LOW_CONFIDENCE = 0.6;
@@ -237,7 +237,7 @@ export function TransactionEditorCard({
         {pool.map((c) => (
           <Chip
             key={c.id}
-            label={c.name}
+            label={categoryLabel(c, d.categoryNames)}
             active={!proposed && c.name === draft.category_name}
             color={c.color}
             onPress={() => onChange({ category_name: c.name, category_is_new: false })}

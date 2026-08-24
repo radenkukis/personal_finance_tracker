@@ -35,6 +35,28 @@ export interface DateNames {
   monthsLong: readonly string[];
 }
 
+/**
+ * Kategori bawaan dikenali lewat slug, bukan namanya, supaya namanya bebas
+ * berubah mengikuti bahasa tanpa memutus hubungan dengan transaksi.
+ */
+export const CATEGORY_SLUGS = [
+  'food_drink',
+  'transport',
+  'shopping',
+  'bills',
+  'health',
+  'entertainment',
+  'education',
+  'home',
+  'social',
+  'other',
+  'salary',
+  'freelance',
+  'other_income',
+] as const;
+
+export type CategorySlug = (typeof CATEGORY_SLUGS)[number];
+
 export interface Dictionary {
   dates: DateNames;
 
@@ -319,10 +341,14 @@ export interface Dictionary {
     searchPlaceholder: string;
     noMatch: string;
     fastParser: string;
+    parserNote: string;
     aiOnly: string;
   };
 
   /** Kalimat temuan — muncul di kartu insight beranda. */
+  /** Nama kategori bawaan. Kategori buatan user memakai namanya sendiri. */
+  categoryNames: Record<CategorySlug, string>;
+
   findings: {
     recurringTitle: string;
     recurringDetail: string;

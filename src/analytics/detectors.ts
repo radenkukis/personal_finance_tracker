@@ -27,6 +27,14 @@ export interface MoneyFormat {
   compact: (amount: number) => string;
   /** Pola kalimat temuan, biasanya `dictionary.findings`. */
   text?: Dictionary['findings'];
+  /**
+   * Nama kategori tersimpan -> nama yang tampil di layar.
+   *
+   * Temuan menyebut kategori di dalam kalimatnya. Tanpa ini, user berbahasa
+   * Jerman membaca "Makan & Minum naik 40%" di sebelah donat yang menuliskan
+   * "Essen & Trinken" — dua nama untuk hal yang sama, di layar yang sama.
+   */
+  label?: (storedName: string) => string;
 }
 
 const RUPIAH: MoneyFormat = { money: rupiah, compact: rupiahCompact };
@@ -34,6 +42,11 @@ const RUPIAH: MoneyFormat = { money: rupiah, compact: rupiahCompact };
 /** Pola kalimat yang berlaku, dengan cadangan bahasa Inggris. */
 function phrases(fmt: MoneyFormat): Dictionary['findings'] {
   return fmt.text ?? en.findings;
+}
+
+/** Nama kategori sebagaimana user melihatnya. */
+function shown(fmt: MoneyFormat, storedName: string): string {
+  return fmt.label ? fmt.label(storedName) : storedName;
 }
 
 export interface TxPoint {
@@ -254,7 +267,10 @@ export function detectCategorySurge(
     out.push({
       kind: 'category_surge',
       severity: pct >= 100 ? 'danger' : 'warning',
-      title: interpolate(phrases(fmt).surgeTitle, { category, percent: Math.round(pct) }),
+      title: interpolate(phrases(fmt).surgeTitle, {
+        category: shown(fmt, category),
+        percent: Math.round(pct),
+      }),
       detail: interpolate(phrases(fmt).surgeDetail, {
         amount: fmt.money(now7),
         average: fmt.compact(priorWeekly),
@@ -319,7 +335,7 @@ export function budgetFindings(
       out.push({
         kind: 'budget_over',
         severity: 'danger',
-        title: interpolate(t.budgetOverTitle, { category: s.categoryName }),
+        title: interpolate(t.budgetOverTitle, { category: shown(fmt, s.categoryName) }),
         detail: interpolate(t.budgetOverDetail, {
           spent: fmt.money(s.spent),
           budget: fmt.money(s.budget),
@@ -335,7 +351,7 @@ export function budgetFindings(
       out.push({
         kind: 'budget_risk',
         severity: 'warning',
-        title: interpolate(t.budgetRiskTitle, { category: s.categoryName }),
+        title: interpolate(t.budgetRiskTitle, { category: shown(fmt, s.categoryName) }),
         detail: interpolate(t.budgetRiskDetail, {
           spent: fmt.money(s.spent),
           budget: fmt.money(s.budget),

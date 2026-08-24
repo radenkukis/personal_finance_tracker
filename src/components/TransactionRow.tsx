@@ -6,6 +6,7 @@ import { colors, size, space } from '@/lib/theme';
 import { clockTime } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
+import { categoryLabel } from '@/lib/categories';
 import type { TransactionWithRefs } from '@/types/db';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -48,10 +49,11 @@ export function TransactionRow({
    */
   const note = tx.note?.trim();
   const merchant = tx.merchant?.trim();
-  const title = merchant || note || tx.category?.name || d.common.uncategorized;
+  const category = tx.category ? categoryLabel(tx.category, d.categoryNames) : null;
+  const title = merchant || note || category || d.common.uncategorized;
 
   // Note hanya diulang di baris bawah bila belum dipakai sebagai judul.
-  const subtitle = [note && merchant ? note : null, tx.category?.name,
+  const subtitle = [note && merchant ? note : null, category,
     clockTime(new Date(tx.occurred_at))].filter(Boolean).join(' · ');
 
   // Hasil AI dengan keyakinan rendah ditandai supaya user tahu perlu dicek.

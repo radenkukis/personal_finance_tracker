@@ -17,7 +17,7 @@ import { colors, space } from '@/lib/theme';
 import { useData } from '@/store/data';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
-import { sameCategoryName } from '@/lib/categories';
+import { categoryLabel, sameCategoryName } from '@/lib/categories';
 import type { DraftTransaction } from '@/types/db';
 
 export default function EditScreen() {
@@ -138,7 +138,9 @@ export default function EditScreen() {
             </Txt>
             <Txt variant="caption" color={colors.textMuted} style={{ marginTop: 4, lineHeight: 18 }}>
               {money(Number(original.amount))} ·{' '}
-              {original.category?.name ?? d.common.uncategorized}
+              {original.category
+                ? categoryLabel(original.category, d.categoryNames)
+                : d.common.uncategorized}
               {original.merchant ? ` · ${original.merchant}` : ''}
               {original.note ? ` · ${original.note}` : ''}
             </Txt>

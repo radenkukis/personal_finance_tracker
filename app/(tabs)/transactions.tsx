@@ -12,6 +12,7 @@ import { colors, radius, size, space } from '@/lib/theme';
 import { dayKey } from '@/lib/format';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
+import { categoryLabel } from '@/lib/categories';
 import { activeFilterCount, applyFilters, EMPTY_FILTERS, type Filters } from '@/lib/filters';
 import type { TransactionWithRefs } from '@/types/db';
 
@@ -63,7 +64,7 @@ export default function RiwayatScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       d.history.deleteTitle,
-      `${tx.merchant ?? tx.note ?? tx.category?.name ?? d.common.uncategorized} · ${money(Number(tx.amount))}`,
+      `${tx.merchant ?? tx.note ?? (tx.category ? categoryLabel(tx.category, d.categoryNames) : d.common.uncategorized)} · ${money(Number(tx.amount))}`,
       [
         { text: d.common.cancel, style: 'cancel' },
         { text: d.common.delete, style: 'destructive', onPress: () => void deleteTransaction(tx.id) },

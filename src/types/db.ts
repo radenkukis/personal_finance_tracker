@@ -27,7 +27,16 @@ export interface Account {
 export interface Category {
   id: string;
   user_id: string;
+  /**
+   * Nama sebagaimana tersimpan. Untuk kategori bawaan ini bukan yang tampil
+   * di layar — lihat `slug`.
+   */
   name: string;
+  /**
+   * Kategori bawaan: kunci nama di kamus, sehingga namanya ikut bahasa user.
+   * null berarti nama itu milik user, dan tidak pernah diterjemahkan.
+   */
+  slug: string | null;
   kind: TxKind;
   icon: string;
   color: string;
@@ -55,7 +64,7 @@ export interface Transaction {
 
 /** Transaksi lengkap dengan relasi — bentuk yang dipakai layar daftar. */
 export interface TransactionWithRefs extends Transaction {
-  category: Pick<Category, 'id' | 'name' | 'icon' | 'color'> | null;
+  category: Pick<Category, 'id' | 'name' | 'icon' | 'color' | 'slug'> | null;
   account: Pick<Account, 'id' | 'name' | 'icon'> | null;
 }
 

@@ -75,3 +75,50 @@ describe('matchAccountId', () => {
     expect(matchAccountId([], 'GoPay')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------
+// Kategori bawaan yang namanya ikut bahasa
+// ---------------------------------------------------------------------
+
+/** Akun berbahasa Inggris: tidak ada baris bernama "Lainnya" sama sekali. */
+const EN_CATEGORIES: { id: string; name: string; kind: TxKind; slug: string | null }[] = [
+  { id: 'c1', name: 'Food & Drink', kind: 'expense', slug: 'food_drink' },
+  { id: 'c2', name: 'Transport', kind: 'expense', slug: 'transport' },
+  { id: 'c9', name: 'Other', kind: 'expense', slug: 'other' },
+  { id: 'x1', name: 'Kopi Spesial', kind: 'expense', slug: null },
+];
+
+/** Nama versi bahasa Jerman, seperti yang dilihat user setelah ganti bahasa. */
+const DE_LABELS = {
+  food_drink: 'Essen & Trinken',
+  transport: 'Transport',
+  other: 'Sonstiges',
+};
+
+describe('kategori bawaan lintas bahasa', () => {
+  it('cocok dengan nama yang dilihat user, bukan yang tersimpan', () => {
+    // AI menjawab memakai nama Jerman karena itu yang dikirim ke prompt.
+    expect(matchCategoryId(EN_CATEGORIES, 'Essen & Trinken', 'expense', DE_LABELS)).toBe('c1');
+  });
+
+  it('nama tersimpan tetap cocok walau bahasanya sudah lain', () => {
+    expect(matchCategoryId(EN_CATEGORIES, 'Food & Drink', 'expense', DE_LABELS)).toBe('c1');
+  });
+
+  it('kategori buatan user tidak ikut diterjemahkan', () => {
+    expect(matchCategoryId(EN_CATEGORIES, 'Kopi Spesial', 'expense', DE_LABELS)).toBe('x1');
+  });
+
+  it('cadangan ditemukan lewat slug, bukan lewat nama "Lainnya"', () => {
+    /*
+     * Ini yang rusak diam-diam sejak kategori disemai per bahasa: akun
+     * berbahasa Inggris tidak punya baris bernama "Lainnya", jadi pencarian
+     * berdasarkan nama gagal dan transaksinya tersimpan tanpa kategori.
+     */
+    expect(matchCategoryId(EN_CATEGORIES, 'sesuatu yang tak dikenal', 'expense')).toBe('c9');
+  });
+
+  it('akun lama berbahasa Indonesia tetap punya cadangan', () => {
+    expect(matchCategoryId(CATEGORIES, 'entah apa', 'expense')).toBe('c9');
+  });
+});

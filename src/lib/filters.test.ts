@@ -27,7 +27,7 @@ function tx(
     was_corrected: false,
     receipt_url: null,
     created_at: d.toISOString(),
-    category: { id: 'c1', name: 'Makan & Minum', icon: 'food', color: '#fff' },
+    category: { id: 'c1', name: 'Makan & Minum', icon: 'food', color: '#fff', slug: 'food_drink' },
     account: null,
     ...extra,
   };

@@ -17,7 +17,8 @@ import { fr } from './fr';
 import { de } from './de';
 import { LOCALES, type Dictionary, type Locale } from './types';
 
-export { LOCALES, LOCALE_NAMES, PARSER_LOCALES } from './types';
+export { LOCALES, LOCALE_NAMES, PARSER_LOCALES, CATEGORY_SLUGS } from './types';
+export type { CategorySlug } from './types';
 /* Diekspor untuk dipakai sebagai cadangan di modul non-React (mis. detektor). */
 export { en };
 export type { Dictionary, Locale } from './types';

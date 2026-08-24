@@ -21,7 +21,7 @@ import {
   deriveKeywords,
   nextCategoryColor,
   normalizeCategoryName,
-  sameCategoryName,
+  findByAnyName,
 } from '@/lib/categories';
 import { useSession } from '@/store/session';
 import { useT } from '@/hooks/useT';
@@ -77,7 +77,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [budgets, setBudgets] = useState<(Budget & { category_name: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { d } = useT();
+  // Dinamai `dict`, bukan `d`: perulangan draft di bawah memakai `d` untuk
+  // satu draft, dan nama yang sama akan menutupinya tanpa peringatan apa pun.
+  const { d: dict } = useT();
 
   /**
    * Kegagalan jaringan sesaat — pindah Wi-Fi, sinyal putus — dulu meninggalkan
@@ -102,7 +104,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         supabase.from('categories').select('*').order('sort_order'),
         supabase
           .from('transactions')
-          .select('*, category:categories(id,name,icon,color), account:accounts(id,name,icon)')
+          .select('*, category:categories(id,name,icon,color,slug), account:accounts(id,name,icon)')
           .gte('occurred_at', since.toISOString())
           .order('occurred_at', { ascending: false }),
         supabase
@@ -125,7 +127,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       );
       retriedRef.current = false;
     } catch (e) {
-      setError(e instanceof Error ? e.message : d.home.loadFailedTitle);
+      setError(e instanceof Error ? e.message : dict.home.loadFailedTitle);
 
       if (!retriedRef.current) {
         retriedRef.current = true;
@@ -135,7 +137,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [userId, d]);
+  }, [userId, dict]);
 
   // `refresh` memanggil dirinya sendiri lewat ref supaya tidak perlu masuk
   // ke daftar dependensinya sendiri.
@@ -173,7 +175,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       for (const d of drafts) {
         if (!d.category_is_new || !d.category_name) continue;
         const name = normalizeCategoryName(d.category_name);
-        const exists = categories.some((c) => c.kind === d.kind && sameCategoryName(c.name, name));
+        const exists = findByAnyName(
+          categories.filter((c) => c.kind === d.kind),
+          name,
+          dict.categoryNames,
+        );
         if (exists) continue;
         pending.set(d.kind + '::' + name.toLowerCase(), { name, kind: d.kind, draft: d });
       }
@@ -212,7 +218,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         source: d.source,
         raw_input: d.raw_input,
         ai_confidence: d.confidence,
-        category_id: matchCategoryId(pool, d.category_name, d.kind),
+        category_id: matchCategoryId(pool, d.category_name, d.kind, dict.categoryNames),
         account_id: matchAccountId(accounts, d.account_name),
       }));
 
@@ -222,7 +228,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await refresh();
       return rows.length;
     },
-    [userId, categories, accounts, refresh],
+    [userId, categories, accounts, refresh, dict],
   );
 
   const updateTransaction = useCallback(
@@ -247,11 +253,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const createCategory = useCallback(
     async (input: NewCategory) => {
-      if (!userId) throw new Error(d.common.notSignedIn);
+      if (!userId) throw new Error(dict.common.notSignedIn);
       const name = normalizeCategoryName(input.name);
-      if (!name) throw new Error(d.categories.nameEmpty);
-      if (categories.some((c) => c.kind === input.kind && sameCategoryName(c.name, name))) {
-        throw new Error(interpolate(d.categories.duplicate, { name }));
+      if (!name) throw new Error(dict.categories.nameEmpty);
+      const pool = categories.filter((c) => c.kind === input.kind);
+      if (findByAnyName(pool, name, dict.categoryNames)) {
+        throw new Error(interpolate(dict.categories.duplicate, { name }));
       }
 
       const { data, error: createError } = await supabase
@@ -271,7 +278,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await refresh();
       return data as Category;
     },
-    [userId, categories, refresh, d],
+    [userId, categories, refresh, dict],
   );
 
   const updateCategory = useCallback(

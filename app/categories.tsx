@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Button, Card, Divider, Field, IconBadge, SectionLabel, Txt, withAlpha } from '@/components/ui';
 import { colors, radius, size, space } from '@/lib/theme';
-import { CATEGORY_COLORS } from '@/lib/categories';
+import { CATEGORY_COLORS, categoryLabel } from '@/lib/categories';
 import { useData } from '@/store/data';
 import { useT } from '@/hooks/useT';
 import type { Dictionary } from '@/lib/i18n';
@@ -43,7 +43,7 @@ export default function KategoriScreen() {
     (category: Category) => {
       const used = countTransactionsIn(category.id);
       Alert.alert(
-        fill(d.categories.deleteTitle, { name: category.name }),
+        fill(d.categories.deleteTitle, { name: categoryLabel(category, d.categoryNames) }),
         used > 0
           ? fill(d.categories.deleteBodyUsed, { count: used })
           : d.categories.deleteBodyUnused,
@@ -192,7 +192,7 @@ function CategoryGroup({
             <Pressable
               onPress={() => onEdit(c)}
               onLongPress={() => onDelete(c)}
-              accessibilityLabel={c.name}
+              accessibilityLabel={categoryLabel(c, d.categoryNames)}
               style={({ pressed }) => [
                 styles.row,
                 pressed && { backgroundColor: colors.surfacePressed },
@@ -201,7 +201,7 @@ function CategoryGroup({
               <View style={[styles.swatch, { backgroundColor: c.color }]} />
               <View style={{ flex: 1 }}>
                 <Txt variant="bodyStrong" numberOfLines={1}>
-                  {c.name}
+                  {categoryLabel(c, d.categoryNames)}
                 </Txt>
                 <Txt variant="caption" color={colors.textFaint} numberOfLines={1}>
                   {c.keywords.length > 0
@@ -256,7 +256,12 @@ function CategoryEditor({
 }) {
   const insets = useSafeAreaInsets();
   const { d } = useT();
-  const [name, setName] = useState(initial.name);
+  /*
+   * Penyunting membuka dengan nama yang TAMPIL, bukan nama tersimpan. Untuk
+   * kategori bawaan keduanya berbeda begitu user mengganti bahasa.
+   */
+  const shownName = categoryLabel(initial, d.categoryNames);
+  const [name, setName] = useState(shownName);
   const [color, setColor] = useState(initial.color);
   const [keywords, setKeywords] = useState<string[]>([...initial.keywords]);
   const [draftKeyword, setDraftKeyword] = useState('');
@@ -390,7 +395,16 @@ function CategoryEditor({
                 setBusy(true);
                 setError(null);
                 try {
-                  await onSave({ name, color, keywords });
+                  /*
+                   * Nama hanya ikut dikirim bila benar-benar diubah. Tanpa
+                   * penjagaan ini, membuka kategori bawaan lalu menekan
+                   * Simpan tanpa mengetik apa pun akan menuliskan nama versi
+                   * bahasa aktif ke database — slug-nya lepas, dan kategori
+                   * itu berhenti mengikuti bahasa selamanya.
+                   */
+                  await onSave(
+                    name === shownName ? { color, keywords } : { name, color, keywords },
+                  );
                 } catch (e) {
                   setError(e instanceof Error ? e.message : d.settings.saveFailed);
                 } finally {

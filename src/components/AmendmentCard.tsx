@@ -13,6 +13,7 @@ import { Button, Card, Divider, Txt, withAlpha } from '@/components/ui';
 import { colors, space } from '@/lib/theme';
 import { useMoney } from '@/hooks/useMoney';
 import { useT } from '@/hooks/useT';
+import { categoryLabel } from '@/lib/categories';
 import type { Amendment } from '@/lib/ai';
 import type { TransactionWithRefs } from '@/types/db';
 
@@ -39,6 +40,10 @@ export function AmendmentCard({
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const shownCategory = transaction?.category
+    ? categoryLabel(transaction.category, d.categoryNames)
+    : null;
+
   const changes = useMemo<FieldChange[]>(() => {
     if (!transaction) return [];
     const out: FieldChange[] = [];
@@ -58,10 +63,10 @@ export function AmendmentCard({
         after: amendment.kind === 'income' ? d.common.income : d.common.expense,
       });
     }
-    if (amendment.category_name !== null && amendment.category_name !== transaction.category?.name) {
+    if (amendment.category_name !== null && amendment.category_name !== shownCategory) {
       out.push({
         label: d.chat.fieldCategory,
-        before: transaction.category?.name ?? dash,
+        before: shownCategory ?? dash,
         after: amendment.category_name,
       });
     }
@@ -72,7 +77,7 @@ export function AmendmentCard({
       out.push({ label: d.chat.fieldNote, before: transaction.note ?? dash, after: amendment.note });
     }
     return out;
-  }, [amendment, transaction, money, d]);
+  }, [amendment, transaction, money, d, shownCategory]);
 
   if (!transaction) {
     return (
@@ -126,7 +131,7 @@ export function AmendmentCard({
 
       <Txt variant="caption" color={colors.textFaint}>
         {[
-          transaction.merchant ?? transaction.note ?? transaction.category?.name,
+          transaction.merchant ?? transaction.note ?? shownCategory,
           relativeDay(new Date(transaction.occurred_at)),
         ]
           .filter(Boolean)

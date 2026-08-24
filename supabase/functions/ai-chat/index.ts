@@ -11,6 +11,8 @@
 import { fail, json, serveAuthed, type AuthedContext } from '../_shared/http.ts';
 import { chat, llmProvider } from '../_shared/providers.ts';
 import { readVoice } from '../_shared/voice.ts';
+import { shownCategoryName } from '../_shared/categoryNames.ts';
+import type { UserVoice } from '../_shared/prompts.ts';
 
 const MAX_QUESTION_CHARS = 500;
 const MAX_HISTORY_TURNS = 6;
@@ -22,7 +24,7 @@ interface TxRow {
   occurred_at: string;
   merchant: string | null;
   note: string | null;
-  categories: { name: string } | null;
+  categories: { name: string; slug: string | null } | null;
 }
 
 /** Sebanyak ini transaksi terbaru dikirim berikut id-nya, agar bisa diubah. */
@@ -40,10 +42,13 @@ Deno.serve(serveAuthed(async (req, ctx) => {
     return fail(`Pertanyaan terlalu panjang (maksimal ${MAX_QUESTION_CHARS} karakter).`);
   }
 
-  const summary = await buildSummary(ctx);
+  // Dibaca sekali, dipakai dua kali: untuk menamai kategori di ringkasan,
+  // dan untuk menentukan bahasa jawaban model.
+  const voice = await readVoice(ctx.db);
+  const summary = await buildSummary(ctx, voice);
   const history = (body?.history ?? []).slice(-MAX_HISTORY_TURNS);
 
-  const result = await chat(question, summary, history, await readVoice(ctx.db));
+  const result = await chat(question, summary, history, voice);
 
   return json({
     answer: result.answer,
@@ -58,7 +63,11 @@ Deno.serve(serveAuthed(async (req, ctx) => {
  * tapi tetap ringkas: total per kategori dua bulan terakhir, budget, dan
  * beberapa transaksi terbesar sebagai contoh konkret.
  */
-async function buildSummary(ctx: AuthedContext): Promise<string> {
+async function buildSummary(ctx: AuthedContext, voice: UserVoice): Promise<string> {
+  /** Nama kategori sebagaimana user melihatnya di layar. */
+  const cat = (row: TxRow) =>
+    row.categories ? shownCategoryName(row.categories, voice.language) : null;
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -66,7 +75,7 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
   const [txResult, budgetResult, profileResult] = await Promise.all([
     ctx.db
       .from('transactions')
-      .select('id, amount, kind, occurred_at, merchant, note, categories(name)')
+      .select('id, amount, kind, occurred_at, merchant, note, categories(name, slug)')
       .gte('occurred_at', prevStart.toISOString())
       .order('occurred_at', { ascending: false }),
     ctx.db.from('budgets').select('amount, categories(name)').eq('period', dateOnly(monthStart)),
@@ -82,19 +91,21 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
     `Tanggal gajian: setiap tanggal ${profileResult.data?.payday_day ?? 25}.`,
     '',
     '== BULAN INI ==',
-    ...summarize(thisMonth),
+    ...summarize(thisMonth, cat),
     '',
     '== BULAN LALU ==',
-    ...summarize(lastMonth),
+    ...summarize(lastMonth, cat),
   ];
 
   const budgets = (budgetResult.data ?? []) as unknown as
     { amount: number; categories: { name: string } | null }[];
   if (budgets.length > 0) {
-    const spent = totalsByCategory(thisMonth);
+    const spent = totalsByCategory(thisMonth, cat);
     lines.push('', '== BUDGET BULAN INI ==');
     for (const b of budgets) {
-      const name = b.categories?.name ?? '(tanpa kategori)';
+      const name = b.categories
+        ? shownCategoryName(b.categories, voice.language)
+        : '(tanpa kategori)';
       lines.push(`${name}: budget ${b.amount}, terpakai ${spent.get(name) ?? 0}`);
     }
   }
@@ -108,10 +119,10 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
   if (amendable.length > 0) {
     lines.push('', '== TRANSAKSI TERBARU (pakai id ini bila diminta mengubah) ==');
     for (const t of amendable) {
-      const label = t.merchant ?? t.note ?? t.categories?.name ?? 'tanpa nama';
+      const label = t.merchant ?? t.note ?? cat(t) ?? 'tanpa nama';
       lines.push(
         `id=${t.id} | ${t.occurred_at.slice(0, 10)} | ${label} | ` +
-          `${t.categories?.name ?? 'tanpa kategori'} | ${t.kind} | ${t.amount}` +
+          `${cat(t) ?? 'tanpa kategori'} | ${t.kind} | ${t.amount}` +
           (t.note && t.merchant ? ` | catatan: ${t.note}` : ''),
       );
     }
@@ -124,7 +135,7 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
   if (biggest.length > 0) {
     lines.push('', '== PENGELUARAN TERBESAR BULAN INI ==');
     for (const t of biggest) {
-      const label = t.merchant ?? t.categories?.name ?? 'tanpa nama';
+      const label = t.merchant ?? cat(t) ?? 'tanpa nama';
       lines.push(`${t.occurred_at.slice(0, 10)} · ${label} · ${t.amount}`);
     }
   }
@@ -133,11 +144,12 @@ async function buildSummary(ctx: AuthedContext): Promise<string> {
   return lines.join('\n');
 }
 
-function summarize(rows: readonly TxRow[]): string[] {
+/** `cat` menamai kategori sebagaimana user melihatnya, bukan sebagaimana tersimpan. */
+function summarize(rows: readonly TxRow[], cat: (r: TxRow) => string | null): string[] {
   const income = rows.filter((t) => t.kind === 'income').reduce((a, t) => a + Number(t.amount), 0);
   const expense = rows.filter((t) => t.kind === 'expense').reduce((a, t) => a + Number(t.amount), 0);
 
-  const byCategory = totalsByCategory(rows);
+  const byCategory = totalsByCategory(rows, cat);
   const sorted = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
 
   return [
@@ -149,11 +161,14 @@ function summarize(rows: readonly TxRow[]): string[] {
   ];
 }
 
-function totalsByCategory(rows: readonly TxRow[]): Map<string, number> {
+function totalsByCategory(
+  rows: readonly TxRow[],
+  cat: (r: TxRow) => string | null,
+): Map<string, number> {
   const out = new Map<string, number>();
   for (const t of rows) {
     if (t.kind !== 'expense') continue;
-    const name = t.categories?.name ?? 'Tanpa kategori';
+    const name = cat(t) ?? 'Tanpa kategori';
     out.set(name, (out.get(name) ?? 0) + Number(t.amount));
   }
   return out;

@@ -79,6 +79,14 @@ export function LanguagePicker({
           </View>
         </View>
 
+        <Txt
+          variant="caption"
+          color={colors.textFaint}
+          style={{ paddingHorizontal: space.lg, paddingBottom: space.md, lineHeight: 17 }}
+        >
+          {d.languagePicker.parserNote}
+        </Txt>
+
         <FlatList
           data={results}
           keyExtractor={(l) => l}

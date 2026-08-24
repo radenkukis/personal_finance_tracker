@@ -1,6 +1,8 @@
 import {
   CATEGORY_COLORS,
+  categoryLabel,
   deriveKeywords,
+  findByAnyName,
   nextCategoryColor,
   normalizeCategoryName,
   sameCategoryName,
@@ -92,5 +94,62 @@ describe('sameCategoryName', () => {
 
   it('membedakan nama yang memang berbeda', () => {
     expect(sameCategoryName('Transport', 'Transportasi')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Nama yang tampil
+// ---------------------------------------------------------------------
+
+const NAMES = {
+  food_drink: 'Essen & Trinken',
+  transport: 'Transport',
+  shopping: 'Einkaufen',
+  bills: 'Rechnungen',
+  health: 'Gesundheit',
+  entertainment: 'Freizeit',
+  education: 'Bildung',
+  home: 'Wohnen',
+  social: 'Soziales',
+  other: 'Sonstiges',
+  salary: 'Gehalt',
+  freelance: 'Freelance',
+  other_income: 'Sonstige Einnahmen',
+};
+
+describe('categoryLabel', () => {
+  it('kategori bawaan memakai nama dari kamus', () => {
+    expect(categoryLabel({ name: 'Makan & Minum', slug: 'food_drink' }, NAMES))
+      .toBe('Essen & Trinken');
+  });
+
+  it('kategori buatan user memakai namanya sendiri', () => {
+    // Menerjemahkan kata milik user justru salah.
+    expect(categoryLabel({ name: 'Hewan Peliharaan', slug: null }, NAMES))
+      .toBe('Hewan Peliharaan');
+  });
+
+  it('slug tak dikenal jatuh ke nama tersimpan, bukan teks kosong', () => {
+    expect(categoryLabel({ name: 'Sesuatu', slug: 'belum_ada_di_kamus' }, NAMES))
+      .toBe('Sesuatu');
+  });
+});
+
+describe('findByAnyName', () => {
+  const pool = [
+    { name: 'Makan & Minum', slug: 'food_drink' },
+    { name: 'Hewan Peliharaan', slug: null },
+  ];
+
+  it('menemukan lewat nama tersimpan', () => {
+    expect(findByAnyName(pool, 'makan & minum', NAMES)?.slug).toBe('food_drink');
+  });
+
+  it('menemukan lewat nama yang sedang ditampilkan', () => {
+    expect(findByAnyName(pool, 'Essen & Trinken', NAMES)?.slug).toBe('food_drink');
+  });
+
+  it('mengembalikan undefined bila memang tidak ada', () => {
+    expect(findByAnyName(pool, 'Olahraga', NAMES)).toBeUndefined();
   });
 });

@@ -7,6 +7,8 @@
  * membuat catatan berikutnya yang serupa tertangkap di HP — instan dan gratis.
  */
 
+import type { CategorySlug, Dictionary } from '@/lib/i18n';
+
 /** Warna kategori, dipilih bergiliran agar dua kategori baru tidak kembar. */
 export const CATEGORY_COLORS = [
   '#FF8A5B', '#5B9BFF', '#C084FC', '#FFB74D', '#4ADE80',
@@ -106,4 +108,45 @@ export function normalizeCategoryName(raw: string): string {
     .split(' ')
     .map((w) => (w.length > 0 ? w[0]!.toUpperCase() + w.slice(1) : w))
     .join(' ');
+}
+
+/** Kategori seperti yang perlu ditampilkan: cukup nama dan slug-nya. */
+export interface Labelled {
+  name: string;
+  slug?: string | null;
+}
+
+/**
+ * Nama yang tampil di layar.
+ *
+ * Kategori bawaan mengambil namanya dari kamus, sehingga ikut bahasa yang
+ * sedang dipakai. Kategori buatan user memakai namanya sendiri apa adanya —
+ * itu katanya, dan menerjemahkannya justru salah.
+ *
+ * Slug yang tidak dikenali (mis. data lama, atau kategori bawaan baru yang
+ * kamusnya belum ikut ter-update) jatuh ke kolom name, bukan ke teks kosong.
+ */
+export function categoryLabel(c: Labelled, names: Dictionary['categoryNames']): string {
+  if (!c.slug) return c.name;
+  return names[c.slug as CategorySlug] ?? c.name;
+}
+
+/**
+ * Mencari kategori dari sebuah nama yang bisa datang dalam bentuk apa pun:
+ * nama tersimpan, atau nama versi bahasa mana pun yang pernah ditampilkan.
+ *
+ * Dibutuhkan karena AI menerima daftar kategori dalam bahasa user dan
+ * menjawab memakai nama itu, sementara yang tersimpan di database adalah
+ * nama saat akun dibuat. Tanpa ini, user yang mengganti bahasa akan melihat
+ * setiap transaksi jatuh ke kategori cadangan.
+ */
+export function findByAnyName<T extends Labelled>(
+  categories: readonly T[],
+  label: string,
+  names: Dictionary['categoryNames'],
+): T | undefined {
+  return (
+    categories.find((c) => sameCategoryName(c.name, label)) ??
+    categories.find((c) => sameCategoryName(categoryLabel(c, names), label))
+  );
 }
