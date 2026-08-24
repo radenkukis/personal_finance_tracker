@@ -281,6 +281,7 @@ export default function AddScreen() {
             </View>
 
             <DraftReviewSheet
+              locked={busy}
               drafts={drafts}
               categories={categories}
               onChange={(i, patch) =>
@@ -330,6 +331,7 @@ export default function AddScreen() {
                 placeholderTextColor={colors.textFaint}
                 multiline
                 autoFocus
+                editable={!busy}
                 style={[type.body, styles.input]}
                 onSubmitEditing={() => void runParse(text)}
                 accessibilityLabel={d.add.title}
@@ -407,6 +409,7 @@ export default function AddScreen() {
               title={d.add.again}
               variant="secondary"
               icon="rotate-ccw"
+              disabled={busy}
               onPress={() => {
                 setDrafts(null);
                 setStatus(null);

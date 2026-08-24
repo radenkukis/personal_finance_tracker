@@ -31,11 +31,14 @@ export function DraftReviewSheet({
   categories,
   onChange,
   onRemove,
+  locked = false,
 }: {
   drafts: readonly DraftTransaction[];
   categories: readonly Category[];
   onChange: (index: number, patch: Partial<DraftTransaction>) => void;
   onRemove: (index: number) => void;
+  /** Semua isian dibekukan selagi penyimpanan berjalan. */
+  locked?: boolean;
 }) {
   return (
     <View style={{ gap: space.sm }}>
@@ -46,6 +49,7 @@ export function DraftReviewSheet({
           categories={categories}
           onChange={(patch) => onChange(i, patch)}
           onRemove={drafts.length > 1 ? () => onRemove(i) : undefined}
+          locked={locked}
         />
       ))}
     </View>
@@ -57,12 +61,22 @@ export function TransactionEditorCard({
   categories,
   onChange,
   onRemove,
+  locked = false,
 }: {
   draft: DraftTransaction;
   categories: readonly Category[];
   onChange: (patch: Partial<DraftTransaction>) => void;
   /** Disembunyikan saat hanya ada satu draft — membuang semuanya tidak berguna. */
   onRemove?: () => void;
+  /**
+   * Membekukan seluruh isian selagi transaksi sedang disimpan.
+   *
+   * Bukan sekadar kosmetik: ketukan yang masuk setelah tombol Simpan ditekan
+   * mengubah draft di memori, sementara yang sudah terlanjur dikirim ke server
+   * adalah nilai yang lama. User melihat angka yang diubahnya, database
+   * menyimpan angka sebelumnya, dan tidak ada yang memberi tahu.
+   */
+  locked?: boolean;
 }) {
   const { currency } = useMoney();
   const { d, relativeDay } = useT();
@@ -89,10 +103,16 @@ export function TransactionEditorCard({
       : null;
 
   return (
-    <Card style={uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : undefined}>
+    <Card
+      style={[
+        uncertain ? { borderColor: withAlpha(colors.warning, 0.5) } : null,
+        locked ? { opacity: 0.55 } : null,
+      ]}
+    >
       {/* Jenis, nominal, hapus */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
         <Pressable
+          disabled={locked}
           onPress={() =>
             onChange({
               kind: draft.kind === 'expense' ? 'income' : 'expense',
@@ -126,6 +146,7 @@ export function TransactionEditorCard({
               onChangeText={(v) => onChange({ amount: parseDigits(v) })}
               keyboardType="number-pad"
               selectTextOnFocus
+              editable={!locked}
               style={[type.displaySm, { color: colors.text, flex: 1, padding: 0 }]}
               accessibilityLabel={d.editor.amount}
             />
@@ -133,7 +154,12 @@ export function TransactionEditorCard({
         </View>
 
         {onRemove ? (
-          <Pressable onPress={onRemove} accessibilityLabel={d.editor.removeDraft} hitSlop={10}>
+          <Pressable
+            onPress={onRemove}
+            disabled={locked}
+            accessibilityLabel={d.editor.removeDraft}
+            hitSlop={10}
+          >
             <Feather name="x" size={18} color={colors.textFaint} />
           </Pressable>
         ) : null}
@@ -159,6 +185,7 @@ export function TransactionEditorCard({
           onChangeText={(v) => onChange({ merchant: v.trim() ? v : null })}
           placeholder={d.editor.merchantPlaceholder}
           placeholderTextColor={colors.textFaint}
+          editable={!locked}
           style={[type.body, styles.input]}
           accessibilityLabel={d.editor.merchantPlaceholder}
         />
@@ -167,6 +194,7 @@ export function TransactionEditorCard({
           onChangeText={(v) => onChange({ note: v.trim() ? v : null })}
           placeholder={d.editor.notePlaceholder}
           placeholderTextColor={colors.textFaint}
+          editable={!locked}
           style={[type.body, styles.input]}
           accessibilityLabel={d.editor.notePlaceholder}
         />
@@ -183,6 +211,7 @@ export function TransactionEditorCard({
       >
         {proposed ? (
           <Pressable
+            disabled={locked}
             onPress={() => onChange({ category_is_new: true, category_name: proposed })}
             accessibilityRole="button"
             accessibilityState={{ selected: true }}
@@ -212,6 +241,7 @@ export function TransactionEditorCard({
             active={!proposed && c.name === draft.category_name}
             color={c.color}
             onPress={() => onChange({ category_name: c.name, category_is_new: false })}
+            disabled={locked}
           />
         ))}
       </ScrollView>
@@ -225,6 +255,7 @@ export function TransactionEditorCard({
       {/* Waktu */}
       <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
         <Pressable
+          disabled={locked}
           onPress={() => setPicking('date')}
           accessibilityLabel={d.editor.changeDate}
           style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
@@ -234,6 +265,7 @@ export function TransactionEditorCard({
         </Pressable>
 
         <Pressable
+          disabled={locked}
           onPress={() => setPicking('time')}
           accessibilityLabel={d.editor.changeTime}
           style={({ pressed }) => [styles.timeBtn, pressed && { borderColor: colors.accent }]}
@@ -289,15 +321,18 @@ function Chip({
   active,
   color,
   onPress,
+  disabled,
 }: {
   label: string;
   active: boolean;
   color: string;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       style={[

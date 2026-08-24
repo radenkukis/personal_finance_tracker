@@ -125,6 +125,7 @@ export default function EditScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <TransactionEditorCard
+          locked={busy}
           draft={draft}
           categories={categories}
           onChange={(patch) => setDraft((prev) => (prev ? { ...prev, ...patch } : prev))}
@@ -157,6 +158,7 @@ export default function EditScreen() {
           variant="danger"
           icon="trash-2"
           full
+          disabled={busy}
           onPress={async () => {
             await deleteTransaction(original.id);
             router.back();
